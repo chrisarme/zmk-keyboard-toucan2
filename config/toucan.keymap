@@ -134,7 +134,7 @@
                 &kp TAB   &kp Q &kp W &kp F &kp P &kp G         &kp J &kp L  &kp U     &kp Y   &kp SEMI &kp BSPC
                 &kp LSHFT &kp A &kp R &kp S &kp T &kp D         &kp H &kp N  &kp E     &kp I   &kp O    &kp SQT
                 &kp LCTRL &kp Z &kp X &kp C &kp V &kp B         &kp K &kp M  &kp COMMA &kp DOT &kp FSLH &kp KP_ENTER
-                                &kp LALT &mo NAV &td0 &kp RET      &kp MINUS &td1
+                                &kp LALT &mo NAV &td0           &kp RET  &kp MINUS &td1
             >;
         };
 
@@ -153,7 +153,7 @@
             bindings = <
                 &trans &kp F1   &kp F2   &kp F3   &kp F4   &kp F5      &kp F6 &kp F7  &kp F8 &kp F9 &kp F10 &kp F11
                 &trans &kp N1   &kp N2   &kp N3   &kp N4   &kp N5      &kp N6 &kp N7  &kp N8  &kp N9 &kp N0 &kp F12 
-                &trans &studio_unlock &trans &trans &trans &trans      &kp UNDER &kp PLUS  &kp LBRC &kp RBRC &kp PIPE &kp TILDE
+                &trans &studio_unlock &trans &trans &kp KP_MINUS &kp UNDER      &kp EQUAL &kp PLUS  &kp LPAR &kp RGAR &kp BSLH &kp GRAVE
                                 	  &trans &trans &trans             &trans   &trans    &trans
             >;
         };
