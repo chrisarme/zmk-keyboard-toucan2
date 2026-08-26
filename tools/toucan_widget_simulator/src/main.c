@@ -103,7 +103,10 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
     for (int y = SCREEN_HEIGHT - 1; y >= 0; y--) {
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             lv_color_t color = lv_canvas_get_px(canvas, x, y);
-            uint8_t value = lv_color_brightness(color) >= 128 ? 255 : 0;
+            // The physical Memory LCD displays the logical monochrome buffer
+            // with reversed polarity: LVGL white is dark ink and LVGL black is
+            // the unfilled light background.
+            uint8_t value = lv_color_brightness(color) >= 128 ? 0 : 255;
             fputc(value, file);
             fputc(value, file);
             fputc(value, file);
@@ -123,7 +126,7 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
 static void print_usage(const char *program) {
     fprintf(stderr,
             "Usage: %s [--left-battery 0..100] [--right-battery 0..100] "
-            "[--screen 0..2] "
+            "[--screen 0..3] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
             "[--left-charging] [--right-charging] --output preview.bmp\n",
@@ -148,7 +151,7 @@ int main(int argc, char **argv) {
 
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "--screen") == 0 && index + 1 < argc) {
-            options.screen = parse_bounded_integer(argv[++index], "--screen", 2);
+            options.screen = parse_bounded_integer(argv[++index], "--screen", 3);
             if (options.screen < 0) return 2;
         } else if (strcmp(argv[index], "--left-battery") == 0 && index + 1 < argc) {
             options.left_battery = parse_percentage(argv[++index], "--left-battery");

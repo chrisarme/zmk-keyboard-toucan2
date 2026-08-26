@@ -30,12 +30,12 @@ def read_bmp(path: Path):
     return width, height, rows
 
 
-def count_lit(rows, x_start, x_end, y_start, y_end):
+def count_ink(rows, x_start, x_end, y_start, y_end):
     return sum(
         1
         for row in rows[y_start:y_end]
         for pixel in row[x_start:x_end]
-        if pixel == (255, 255, 255)
+        if pixel == (0, 0, 0)
     )
 
 
@@ -62,12 +62,12 @@ def main():
     if (width, height) != (144, 168):
         raise AssertionError(f"expected 144x168 output, found {width}x{height}")
 
-    left_lit = count_lit(rows, 8, 66, 15, 62)
-    right_lit = count_lit(rows, 80, 138, 15, 62)
-    if left_lit <= right_lit:
+    left_ink = count_ink(rows, 8, 66, 15, 62)
+    right_ink = count_ink(rows, 80, 138, 15, 62)
+    if left_ink <= right_ink:
         raise AssertionError(
-            f"100% left arc should have more lit pixels than 10% right arc: "
-            f"left={left_lit}, right={right_lit}"
+            f"100% left arc should have more dark ink than 10% right arc: "
+            f"left={left_ink}, right={right_ink}"
         )
 
 

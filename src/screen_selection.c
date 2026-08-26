@@ -23,6 +23,7 @@ int toucan_screen_resolve(uint8_t current_screen, uint32_t command,
   case TOUCAN_SCREEN_0:
   case TOUCAN_SCREEN_1:
   case TOUCAN_SCREEN_2:
+  case TOUCAN_SCREEN_3:
     *selected_screen = (uint8_t)command;
     return 0;
   case TOUCAN_SCREEN_NEXT:

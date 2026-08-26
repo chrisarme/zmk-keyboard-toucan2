@@ -1,3 +1,4 @@
+import binascii
 import struct
 import subprocess
 import sys
@@ -8,6 +9,41 @@ from pathlib import Path
 
 
 TOOL = Path(__file__).resolve().parents[1] / "toucan_art.py"
+
+
+def png_chunk(name: bytes, payload: bytes) -> bytes:
+    checksum = binascii.crc32(name + payload) & 0xFFFFFFFF
+    return struct.pack(">I", len(payload)) + name + payload + struct.pack(">I", checksum)
+
+
+def write_rgb_png(path: Path, rows):
+    height = len(rows)
+    width = len(rows[0])
+    scanlines = b"".join(
+        b"\x00" + b"".join(bytes(pixel) for pixel in row) for row in rows
+    )
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", header)
+        + png_chunk(b"IDAT", zlib.compress(scanlines))
+        + png_chunk(b"IEND", b"")
+    )
+
+
+def write_rgba_png(path: Path, rows):
+    height = len(rows)
+    width = len(rows[0])
+    scanlines = b"".join(
+        b"\x00" + b"".join(bytes(pixel) for pixel in row) for row in rows
+    )
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", header)
+        + png_chunk(b"IDAT", zlib.compress(scanlines))
+        + png_chunk(b"IEND", b"")
+    )
 
 
 def read_indexed_png(path: Path):
@@ -211,6 +247,254 @@ class ExtractCommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue((output_dir / "nested_art.png").is_file())
             self.assertFalse((output_dir / "header_art.png").exists())
+
+    def test_extract_still_runs_when_optional_site_packages_are_disabled(self):
+        source = """
+        const uint8_t pixel_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t pixel = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = pixel_map,
+        };
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "asset.c"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(temp / "out"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((temp / "out" / "pixel.png").is_file())
+
+
+class ConvertCommandTests(unittest.TestCase):
+    def test_converts_to_c_and_builds_preview_from_round_tripped_bytes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "source.png"
+            output_dir = temp / "generated"
+            extracted_dir = temp / "extracted"
+            write_rgb_png(
+                source_path,
+                [
+                    [(0, 0, 0), (255, 255, 255)],
+                    [(255, 255, 255), (0, 0, 0)],
+                ],
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--size",
+                    "2x2",
+                    "--fit",
+                    "stretch",
+                    "--name",
+                    "checker",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_path = output_dir / "checker.c"
+            preview_path = output_dir / "checker.preview.png"
+            self.assertTrue(c_path.is_file())
+            self.assertTrue(preview_path.is_file())
+            c_text = c_path.read_text(encoding="utf-8")
+            self.assertIn("LV_IMG_CF_INDEXED_1BIT", c_text)
+            self.assertIn(".data_size = 10", c_text)
+            self.assertIn("0x40, 0x80", c_text)
+            self.assertIn("10 data bytes", result.stdout)
+
+            extract_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(c_path),
+                    "--output",
+                    str(extracted_dir),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(extract_result.returncode, 0, extract_result.stderr)
+            _, _, _, _, preview_rows = read_indexed_png(preview_path)
+            _, _, _, _, logical_rows = read_indexed_png(
+                extracted_dir / "checker.png"
+            )
+            black = (0, 0, 0)
+            white = (255, 255, 255)
+            self.assertEqual(preview_rows, [[white, black], [black, white]])
+            self.assertEqual(logical_rows, [[black, white], [white, black]])
+
+    def test_contain_preserves_aspect_ratio_and_uses_background(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "wide logo.png"
+            output_dir = temp / "generated"
+            write_rgb_png(source_path, [[(0, 0, 0), (0, 0, 0)]])
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--size",
+                    "4x4",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            preview = output_dir / "wide_logo.preview.png"
+            width, height, _, _, rows = read_indexed_png(preview)
+            black = (0, 0, 0)
+            white = (255, 255, 255)
+            self.assertEqual((width, height), (4, 4))
+            self.assertEqual(rows, [[black] * 4, [white] * 4, [white] * 4, [black] * 4])
+
+    def test_output_polarity_is_inverted_with_black_white_and_transparent_background(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "transparent.png"
+            output_dir = temp / "generated"
+            write_rgba_png(
+                source_path,
+                [[(0, 0, 0, 255), (255, 255, 255, 255), (0, 0, 0, 0)]],
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--size",
+                    "3x1",
+                    "--fit",
+                    "stretch",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_text = (output_dir / "transparent.c").read_text(encoding="utf-8")
+            self.assertIn("0x60,", c_text)
+            _, _, _, _, rows = read_indexed_png(
+                output_dir / "transparent.preview.png"
+            )
+            self.assertEqual(
+                rows,
+                [[(255, 255, 255), (0, 0, 0), (0, 0, 0)]],
+            )
+
+    def test_refuses_to_overwrite_without_force(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "art.png"
+            output_dir = temp / "generated"
+            output_dir.mkdir()
+            (output_dir / "art.c").write_text("keep me", encoding="utf-8")
+            write_rgb_png(source_path, [[(0, 0, 0)]])
+            command = [
+                sys.executable,
+                str(TOOL),
+                "convert",
+                str(source_path),
+                "--output",
+                str(output_dir),
+                "--size",
+                "1x1",
+            ]
+
+            refused = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn("refusing to overwrite", refused.stderr)
+            self.assertEqual((output_dir / "art.c").read_text(encoding="utf-8"), "keep me")
+
+            replaced = subprocess.run(command + ["--force"], capture_output=True, text=True)
+            self.assertEqual(replaced.returncode, 0, replaced.stderr)
+            self.assertIn("LV_IMG_CF_INDEXED_1BIT", (output_dir / "art.c").read_text())
+
+    def test_rejects_threshold_outside_byte_range(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "art.png"
+            write_rgb_png(source_path, [[(0, 0, 0)]])
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "out"),
+                    "--size",
+                    "1x1",
+                    "--threshold",
+                    "256",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("between 0 and 255", result.stderr)
+
+    def test_reports_how_to_install_the_optional_dependency(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "art.png"
+            write_rgb_png(source_path, [[(0, 0, 0)]])
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "out"),
+                    "--size",
+                    "1x1",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("static conversion requires Pillow", result.stderr)
+            self.assertIn("requirements.txt", result.stderr)
 
 
 if __name__ == "__main__":

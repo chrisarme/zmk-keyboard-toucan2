@@ -37,6 +37,7 @@ add_executable(
   ${TOUCAN_WIDGET_DIR}/screen_layout.c
   ${TOUCAN_WIDGET_DIR}/util.c
   ${TOUCAN_ASSET_DIR}/images.c
+  ${TOUCAN_ASSET_DIR}/naotoframe1.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c

@@ -5,7 +5,8 @@ from pathlib import Path
 from verify_battery_preview import read_bmp
 
 
-def render(executable: Path, output: Path, screen: int):
+def render(executable: Path, output: Path, screen: int, overrides=None):
+    overrides = overrides or []
     result = subprocess.run(
         [
             str(executable),
@@ -22,6 +23,7 @@ def render(executable: Path, output: Path, screen: int):
             "--endpoint",
             "ble",
             "--connected",
+            *overrides,
             "--output",
             str(output),
         ],
@@ -43,11 +45,35 @@ def main():
 
     frames = [
         render(executable, output_dir / f"screen-{screen}.bmp", screen)
-        for screen in range(3)
+        for screen in range(4)
     ]
     encoded = [tuple(pixel for row in frame for pixel in row) for frame in frames]
-    if len(set(encoded)) != 3:
-        raise AssertionError("screens 0, 1, and 2 should render three distinct frames")
+    if len(set(encoded)) != 4:
+        raise AssertionError("screens 0, 1, 2, and 3 should render four distinct frames")
+    if frames[3][0][0] != (255, 255, 255):
+        raise AssertionError("screen 3 logical black background should preview as unfilled white")
+    if not any(pixel == (0, 0, 0) for row in frames[3] for pixel in row):
+        raise AssertionError("screen 3 logical white artwork should preview as dark ink")
+
+    alternate_image_frame = render(
+        executable,
+        output_dir / "screen-3-alternate-state.bmp",
+        3,
+        [
+            "--left-battery",
+            "1",
+            "--right-battery",
+            "99",
+            "--layer-name",
+            "SHOULD_NOT_APPEAR",
+            "--profile",
+            "4",
+            "--endpoint",
+            "usb",
+        ],
+    )
+    if alternate_image_frame != frames[3]:
+        raise AssertionError("screen 3 should render only the image, independent of status state")
 
 
 if __name__ == "__main__":

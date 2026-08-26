@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract LVGL v8 indexed one-bit C images as editable PNG files."""
+"""Convert and extract LVGL v8 indexed one-bit display images."""
 
 from __future__ import annotations
 
@@ -15,6 +15,53 @@ from pathlib import Path
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+STATIC_IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+C_KEYWORDS = {
+    "auto",
+    "break",
+    "case",
+    "char",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extern",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "register",
+    "restrict",
+    "return",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "struct",
+    "switch",
+    "typedef",
+    "union",
+    "unsigned",
+    "void",
+    "volatile",
+    "while",
+    "_Alignas",
+    "_Alignof",
+    "_Atomic",
+    "_Bool",
+    "_Complex",
+    "_Generic",
+    "_Imaginary",
+    "_Noreturn",
+    "_Static_assert",
+    "_Thread_local",
+}
 
 
 @dataclass(frozen=True)
@@ -32,6 +79,14 @@ class ExtractedAsset:
     asset: ImageAsset
     source_path: Path
     output_path: Path
+
+
+@dataclass(frozen=True)
+class ConvertedAsset:
+    asset: ImageAsset
+    source_path: Path
+    c_path: Path
+    preview_path: Path | None
 
 
 def _strip_comments(text: str) -> str:
@@ -129,6 +184,24 @@ def write_indexed_png(asset: ImageAsset, output_path: Path) -> None:
     output_path.write_bytes(png)
 
 
+def write_physical_preview_png(asset: ImageAsset, output_path: Path) -> None:
+    physical_palette = tuple(
+        (255 - red, 255 - green, 255 - blue, alpha)
+        for red, green, blue, alpha in asset.palette
+    )
+    write_indexed_png(
+        ImageAsset(
+            name=asset.name,
+            width=asset.width,
+            height=asset.height,
+            palette=physical_palette,
+            pixels=asset.pixels,
+            declared_size=asset.declared_size,
+        ),
+        output_path,
+    )
+
+
 def discover_source_files(inputs: list[Path]) -> list[Path]:
     source_files = []
     seen = set()
@@ -209,6 +282,228 @@ def write_gallery(extracted: list[ExtractedAsset], output_path: Path) -> None:
     output_path.write_text(document, encoding="utf-8")
 
 
+def _require_pillow():
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as error:
+        raise RuntimeError(
+            "static conversion requires Pillow; install it with "
+            "'py -3 -m pip install -r tools/toucan_art/requirements.txt'"
+        ) from error
+    return Image, ImageOps
+
+
+def _parse_size(value: str) -> tuple[int, int]:
+    match = re.fullmatch(r"\s*(\d+)[xX](\d+)\s*", value)
+    if not match:
+        raise argparse.ArgumentTypeError("size must use WIDTHxHEIGHT, for example 144x168")
+    width, height = (int(part) for part in match.groups())
+    if width < 1 or height < 1 or width > 2047 or height > 2047:
+        raise argparse.ArgumentTypeError("LVGL v8 width and height must be between 1 and 2047")
+    return width, height
+
+
+def _c_identifier(stem: str) -> str:
+    identifier = re.sub(r"\W", "_", stem, flags=re.ASCII)
+    if not identifier:
+        identifier = "image"
+    if identifier[0].isdigit():
+        identifier = f"_{identifier}"
+    if identifier in C_KEYWORDS:
+        identifier = f"image_{identifier}"
+    return identifier
+
+
+def _validate_c_identifier(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z_]\w*", value, flags=re.ASCII):
+        raise argparse.ArgumentTypeError(
+            "image name must be a C identifier containing only ASCII letters, digits, and underscores"
+        )
+    if value in C_KEYWORDS:
+        raise argparse.ArgumentTypeError(f"{value!r} is a reserved C keyword")
+    return value
+
+
+def discover_image_files(inputs: list[Path], excluded_dir: Path | None = None) -> list[Path]:
+    image_files = []
+    seen = set()
+    excluded_identity = excluded_dir.resolve() if excluded_dir else None
+    for input_path in inputs:
+        if not input_path.exists():
+            raise ValueError(f"input does not exist: {input_path}")
+        input_is_directory = input_path.is_dir()
+        candidates = sorted(input_path.rglob("*")) if input_is_directory else [input_path]
+        for candidate in candidates:
+            if not candidate.is_file() or candidate.suffix.lower() not in STATIC_IMAGE_EXTENSIONS:
+                continue
+            identity = candidate.resolve()
+            if input_is_directory and excluded_identity and (
+                identity == excluded_identity or excluded_identity in identity.parents
+            ):
+                continue
+            if identity not in seen:
+                seen.add(identity)
+                image_files.append(candidate)
+    if not image_files:
+        joined_inputs = ", ".join(str(path) for path in inputs)
+        raise ValueError(f"no supported static images found in: {joined_inputs}")
+    return image_files
+
+
+def _prepare_monochrome_image(
+    source_path: Path,
+    size: tuple[int, int],
+    fit: str,
+    background: str,
+    threshold: int,
+    dither: str,
+    invert: bool,
+):
+    Image, ImageOps = _require_pillow()
+    background_value = 0 if background == "black" else 255
+    background_rgb = (background_value,) * 3
+
+    with Image.open(source_path) as opened:
+        if getattr(opened, "n_frames", 1) > 1:
+            raise ValueError(
+                f"{source_path}: animated images are reserved for the future GIF converter"
+            )
+        oriented = ImageOps.exif_transpose(opened)
+        rgba = oriented.convert("RGBA")
+        flattened = Image.new("RGB", rgba.size, background_rgb)
+        flattened.paste(rgba, mask=rgba.getchannel("A"))
+
+    if fit == "contain":
+        resized = ImageOps.contain(flattened, size, method=Image.Resampling.LANCZOS)
+        fitted = Image.new("RGB", size, background_rgb)
+        offset = ((size[0] - resized.width) // 2, (size[1] - resized.height) // 2)
+        fitted.paste(resized, offset)
+    elif fit == "cover":
+        fitted = ImageOps.fit(flattened, size, method=Image.Resampling.LANCZOS)
+    else:
+        fitted = flattened.resize(size, resample=Image.Resampling.LANCZOS)
+
+    grayscale = fitted.convert("L")
+    if invert:
+        grayscale = ImageOps.invert(grayscale)
+    if dither == "floyd-steinberg":
+        return grayscale.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+    return grayscale.point(lambda pixel: 255 if pixel >= threshold else 0, mode="1")
+
+
+def _pack_monochrome_pixels(image) -> bytes:
+    width, height = image.size
+    pixels = image.load()
+    stride = (width + 7) // 8
+    packed = bytearray(stride * height)
+    for y in range(height):
+        for x in range(width):
+            # Pack source white as logical white (index 1). The physical panel
+            # reverses that polarity, so the converted artwork appears inverted.
+            if pixels[x, y]:
+                packed[y * stride + x // 8] |= 1 << (7 - (x % 8))
+    return bytes(packed)
+
+
+def _format_c_asset(asset: ImageAsset) -> str:
+    macro_name = asset.name.upper()
+    raw = bytearray()
+    for red, green, blue, alpha in asset.palette:
+        raw.extend((blue, green, red, alpha))
+    raw.extend(asset.pixels)
+
+    rows = []
+    for offset in range(0, len(raw), 12):
+        values = ", ".join(f"0x{value:02x}" for value in raw[offset : offset + 12])
+        rows.append(f"    {values},")
+    data = "\n".join(rows)
+    return f"""#include <lvgl.h>
+
+#ifndef LV_ATTRIBUTE_IMG_{macro_name}
+#define LV_ATTRIBUTE_IMG_{macro_name}
+#endif
+
+const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_{macro_name} uint8_t {asset.name}_map[] = {{
+{data}
+}};
+
+const lv_img_dsc_t {asset.name} = {{
+    .header.cf = LV_IMG_CF_INDEXED_1BIT,
+    .header.always_zero = 0,
+    .header.reserved = 0,
+    .header.w = {asset.width},
+    .header.h = {asset.height},
+    .data_size = {len(raw)},
+    .data = {asset.name}_map,
+}};
+"""
+
+
+def convert_images(
+    inputs: list[Path],
+    output_dir: Path,
+    size: tuple[int, int],
+    fit: str,
+    background: str,
+    threshold: int,
+    dither: str,
+    invert: bool,
+    name: str | None,
+    preview: bool,
+    force: bool,
+) -> list[ConvertedAsset]:
+    sources = discover_image_files(inputs, excluded_dir=output_dir)
+    if name and len(sources) != 1:
+        raise ValueError("--name can only be used when exactly one input image is found")
+
+    jobs = []
+    names = set()
+    for source_path in sources:
+        image_name = name or _c_identifier(source_path.stem)
+        if image_name in names:
+            raise ValueError(f"duplicate generated image name {image_name!r}")
+        names.add(image_name)
+
+        c_path = output_dir / f"{image_name}.c"
+        preview_path = output_dir / f"{image_name}.preview.png" if preview else None
+        targets = [c_path] + ([preview_path] if preview_path else [])
+        existing = [path for path in targets if path.exists()]
+        if existing and not force:
+            raise ValueError(
+                f"refusing to overwrite {existing[0]}; pass --force to replace generated files"
+            )
+        jobs.append((source_path, image_name, c_path, preview_path))
+
+    converted = []
+    for source_path, image_name, c_path, preview_path in jobs:
+        image = _prepare_monochrome_image(
+            source_path, size, fit, background, threshold, dither, invert
+        )
+        asset = ImageAsset(
+            name=image_name,
+            width=size[0],
+            height=size[1],
+            palette=((0, 0, 0, 255), (255, 255, 255, 255)),
+            pixels=_pack_monochrome_pixels(image),
+            declared_size=8 + ((size[0] + 7) // 8) * size[1],
+        )
+        c_text = _format_c_asset(asset)
+
+        # Parse our emitted C before writing it. This keeps conversion and extraction
+        # compatible. The preview uses those packed bytes with the physical panel's
+        # reversed monochrome polarity.
+        parsed = parse_assets(c_text)
+        if len(parsed) != 1:
+            raise ValueError(f"{image_name}: generated C did not round-trip through the extractor")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        c_path.write_text(c_text, encoding="utf-8")
+        if preview_path:
+            write_physical_preview_png(parsed[0], preview_path)
+        converted.append(ConvertedAsset(parsed[0], source_path, c_path, preview_path))
+    return converted
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -223,23 +518,77 @@ def _build_parser() -> argparse.ArgumentParser:
     extract.add_argument(
         "--gallery", action="store_true", help="also create a browser gallery at index.html"
     )
+    convert = subparsers.add_parser(
+        "convert", help="convert ordinary static images to one-bit LVGL v8 C arrays"
+    )
+    convert.add_argument(
+        "source",
+        type=Path,
+        nargs="+",
+        help="image file(s), or directories to scan recursively for supported images",
+    )
+    convert.add_argument("--output", type=Path, required=True, help="output directory")
+    convert.add_argument("--size", type=_parse_size, required=True, help="target WIDTHxHEIGHT")
+    convert.add_argument(
+        "--fit", choices=("contain", "cover", "stretch"), default="contain"
+    )
+    convert.add_argument("--background", choices=("black", "white"), default="white")
+    convert.add_argument("--threshold", type=int, default=128, metavar="0-255")
+    convert.add_argument(
+        "--dither", choices=("none", "floyd-steinberg"), default="none"
+    )
+    convert.add_argument("--invert", action="store_true", help="invert black and white")
+    convert.add_argument(
+        "--name", type=_validate_c_identifier, help="C image name (single image only)"
+    )
+    convert.add_argument(
+        "--preview", action="store_true", help="write a PNG decoded from the generated C data"
+    )
+    convert.add_argument("--force", action="store_true", help="overwrite generated files")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        extracted = extract_sources(args.source, args.output)
-        if args.gallery:
-            write_gallery(extracted, args.output / "index.html")
-    except (OSError, ValueError) as error:
+        if args.command == "extract":
+            extracted = extract_sources(args.source, args.output)
+            if args.gallery:
+                write_gallery(extracted, args.output / "index.html")
+        else:
+            if not 0 <= args.threshold <= 255:
+                raise ValueError("--threshold must be between 0 and 255")
+            converted = convert_images(
+                args.source,
+                args.output,
+                args.size,
+                args.fit,
+                args.background,
+                args.threshold,
+                args.dither,
+                args.invert,
+                args.name,
+                args.preview,
+                args.force,
+            )
+    except (OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
-    for item in extracted:
-        print(item.output_path)
-    if args.gallery:
-        print(args.output / "index.html")
+    if args.command == "extract":
+        for item in extracted:
+            print(item.output_path)
+        if args.gallery:
+            print(args.output / "index.html")
+    else:
+        for item in converted:
+            data_size = item.asset.declared_size
+            print(
+                f"{item.c_path} "
+                f"({item.asset.width}x{item.asset.height}, {data_size} data bytes)"
+            )
+            if item.preview_path:
+                print(item.preview_path)
     return 0
 
 

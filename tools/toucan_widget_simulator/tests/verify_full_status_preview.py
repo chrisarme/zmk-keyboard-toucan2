@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from verify_battery_preview import count_lit, read_bmp
+from verify_battery_preview import count_ink, read_bmp
 
 
 def main():
@@ -47,8 +47,8 @@ def main():
         "output label": (70, 120, 140, 157),
     }
     for name, bounds in regions.items():
-        if count_lit(rows, *bounds) == 0:
-            raise AssertionError(f"expected the {name} region to contain lit pixels")
+        if count_ink(rows, *bounds) == 0:
+            raise AssertionError(f"expected the {name} region to contain dark ink")
 
 
 if __name__ == "__main__":

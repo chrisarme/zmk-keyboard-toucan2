@@ -1,6 +1,6 @@
 # Toucan widget simulator
 
-This host-side tool renders any of the Toucan's three status screens into a 144×168 monochrome BMP without building or flashing the keyboard firmware. It uses the same LVGL revision as this ZMK version and compiles the real widget, image, and font sources from the shield.
+This host-side tool renders any of the Toucan's four screens into a 144×168 monochrome BMP without building or flashing the keyboard firmware. It uses the same LVGL revision as this ZMK version and compiles the real widget, image, and font sources from the shield.
 
 It provides both a command-line renderer and an interactive desktop preview. It is not a full emulation of ZMK events or display hardware.
 
@@ -31,7 +31,7 @@ Build the renderer once, then launch the desktop control panel:
 python tools/toucan_widget_simulator/preview_gui.py
 ```
 
-The window magnifies the physical 144×168 display to 432×504. Screen style, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce.
+The window magnifies the physical 144×168 display to 432×504. Screen style, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
 
 **Layer #** is the zero-based layer number used internally by ZMK. When **Name** is filled in, that name is displayed and the number has no visible effect. When **Name** is blank, the screen uses the number as a fallback label such as `L#2`.
 
@@ -58,7 +58,7 @@ Build products and generated previews are ignored by Git.
 
 | Option | Accepted values | Default | Effect |
 | --- | --- | --- | --- |
-| `--screen` | 0–2 | 2 | Status layout: standard, Toucan logo, or arcs/WPM |
+| `--screen` | 0–3 | 2 | Layout: standard, Toucan logo, arcs/WPM, or image-only Naoto art |
 | `--left-battery` | 0–100 | 75 | Left-half battery percentage |
 | `--right-battery` | 0–100 | 50 | Right-half battery percentage |
 | `--wpm` | 0–255 | 0 | Adds the newest sample to the WPM chart |
@@ -71,7 +71,7 @@ Build products and generated previews are ignored by Git.
 | `--right-charging` | Flag | Off | Sets the real right charging state |
 | `--output` | BMP filename | Required | Output file to create |
 
-The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column.
+The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 intentionally ignores all injected status values and displays only `naotoframe1`.
 
 ## Test
 

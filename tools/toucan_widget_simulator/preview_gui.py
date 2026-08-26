@@ -215,7 +215,7 @@ class PreviewApp:
         )
         ttk.Combobox(
             controls,
-            values=(0, 1, 2),
+            values=(0, 1, 2, 3),
             state="readonly",
             width=5,
             textvariable=self.screen,
