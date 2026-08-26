@@ -19,7 +19,7 @@ static void draw_active_profile(lv_obj_t *canvas, const struct status_state *sta
     lv_canvas_draw_rect(canvas, 85 + offset, 143, 8, 8, &rect_white_dsc);
 }
 
-void draw_profile_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_profile_standard_status(lv_obj_t *canvas, const struct status_state *state) {
     draw_inactive_profiles(canvas, state);
     draw_active_profile(canvas, state);
 }

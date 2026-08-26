@@ -22,7 +22,7 @@ static void draw_ble_connected(lv_obj_t *canvas) {
     lv_canvas_draw_text(canvas, 12, 140, SCREEN_WIDTH-8, &label_dsc, "BLE");
 }
 
-void draw_output_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_output_standard_status(lv_obj_t *canvas, const struct status_state *state) {
     switch (state->selected_endpoint.transport) {
         case ZMK_TRANSPORT_USB:
             draw_usb_connected(canvas);

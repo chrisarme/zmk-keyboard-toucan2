@@ -1,0 +1,8 @@
+#pragma once
+
+#define TOUCAN_SCREEN_0 0
+#define TOUCAN_SCREEN_1 1
+#define TOUCAN_SCREEN_2 2
+#define TOUCAN_SCREEN_COUNT 3
+#define TOUCAN_SCREEN_NEXT 3
+#define TOUCAN_SCREEN_PREV 4

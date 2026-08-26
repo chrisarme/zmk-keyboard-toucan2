@@ -55,7 +55,7 @@ static void draw_battery_labels_peripheral(lv_obj_t *canvas, uint8_t level)
     lv_canvas_draw_text(canvas, 81, 45, 56, &label_dsc_txt, buf);
 }
 
-void draw_battery_peripheral_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_battery_peripheral_arc_status(lv_obj_t *canvas, const struct status_state *state) {
     uint8_t level = state->battery_p;
     if (level > 0) {
         draw_battery_arc_peripheral(canvas, bat_dots_peripheral, level, true);

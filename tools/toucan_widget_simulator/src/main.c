@@ -7,12 +7,7 @@
 #include <lvgl.h>
 #include <zmk/keymap.h>
 
-#include "battery_arc.h"
-#include "battery_arc_peripheral.h"
-#include "chart.h"
-#include "layer_arc.h"
-#include "output_arc.h"
-#include "profile_arc.h"
+#include "screen_layout.h"
 #include "util.h"
 
 static lv_disp_draw_buf_t display_draw_buffer;
@@ -20,6 +15,7 @@ static lv_color_t display_pixels[SCREEN_WIDTH * 10];
 static lv_color_t canvas_pixels[SCREEN_WIDTH * SCREEN_HEIGHT];
 
 struct preview_options {
+    int screen;
     int left_battery;
     int right_battery;
     int wpm;
@@ -127,6 +123,7 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
 static void print_usage(const char *program) {
     fprintf(stderr,
             "Usage: %s [--left-battery 0..100] [--right-battery 0..100] "
+            "[--screen 0..2] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
             "[--left-charging] [--right-charging] --output preview.bmp\n",
@@ -135,6 +132,7 @@ static void print_usage(const char *program) {
 
 int main(int argc, char **argv) {
     struct preview_options options = {
+        .screen = CONFIG_TOUCAN_STATUS_SCREEN,
         .left_battery = 75,
         .right_battery = 50,
         .wpm = 0,
@@ -149,7 +147,10 @@ int main(int argc, char **argv) {
     };
 
     for (int index = 1; index < argc; index++) {
-        if (strcmp(argv[index], "--left-battery") == 0 && index + 1 < argc) {
+        if (strcmp(argv[index], "--screen") == 0 && index + 1 < argc) {
+            options.screen = parse_bounded_integer(argv[++index], "--screen", 2);
+            if (options.screen < 0) return 2;
+        } else if (strcmp(argv[index], "--left-battery") == 0 && index + 1 < argc) {
             options.left_battery = parse_percentage(argv[++index], "--left-battery");
             if (options.left_battery < 0) {
                 return 2;
@@ -235,12 +236,7 @@ int main(int argc, char **argv) {
     };
     toucan_simulator_set_layer_name(options.layer_name);
     fill_background(canvas);
-    draw_output_status(canvas, &state);
-    draw_chart_status(canvas, &state);
-    draw_layer_status(canvas, &state);
-    draw_profile_status(canvas, &state);
-    draw_battery_status(canvas, &state);
-    draw_battery_peripheral_status(canvas, &state);
+    draw_toucan_status_layout(canvas, &state, (uint8_t)options.screen);
 
     int result = write_canvas_bmp(canvas, options.output_path);
     lv_deinit();

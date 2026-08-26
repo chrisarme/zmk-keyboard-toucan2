@@ -27,7 +27,7 @@ static void draw_outlined_rect(lv_obj_t *canvas, int x, int y, int w, int h,
     lv_canvas_draw_rect(canvas, x, y, w, h, &dsc);
 }
 
-void draw_profile_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_profile_arc_status(lv_obj_t *canvas, const struct status_state *state) {
     lv_color_t bg    = LVGL_BACKGROUND; 
     lv_color_t fg    = LVGL_FOREGROUND;
 

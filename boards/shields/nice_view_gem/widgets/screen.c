@@ -1,4 +1,5 @@
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -21,41 +22,62 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/split/central.h>
 
-#if defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 2
-#include "battery_arc.h"
-#include "battery_arc_peripheral.h"
-#include "profile_arc.h"
-#include "output_arc.h"
-#include "chart.h"
-#else
 #include "battery.h"
 #include "battery_peripheral.h"
-#include "profile.h"
-#include "output.h"
-#endif
-
-#if defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 1
-#include "layer_logo.h"
-#elif defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 2
-#include "layer_arc.h"
-#else
+#include "chart.h"
 #include "layer.h"
-#endif
+#include "output.h"
 
 #include "screen.h"
+#include "screen_layout.h"
 #include "sleep.h"
+
+#include <toucan/screen.h>
+#include <toucan/screen_selection.h>
 
 struct connection_status_state {
     bool connected;
 };
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
+static atomic_t requested_screen = ATOMIC_INIT(CONFIG_TOUCAN_STATUS_SCREEN);
+static uint8_t active_screen = CONFIG_TOUCAN_STATUS_SCREEN;
+
+static void force_redraw_all_widgets(void);
+
+static void screen_change_work_cb(struct k_work *work) {
+    ARG_UNUSED(work);
+    active_screen = (uint8_t)atomic_get(&requested_screen);
+    force_redraw_all_widgets();
+}
+
+K_WORK_DEFINE(screen_change_work, screen_change_work_cb);
+
+int toucan_screen_request(uint32_t command) {
+    atomic_val_t current;
+    uint8_t selected;
+    int err;
+
+    do {
+        current = atomic_get(&requested_screen);
+        err = toucan_screen_resolve((uint8_t)current, command, &selected);
+        if (err < 0) {
+            return err;
+        }
+    } while (!atomic_cas(&requested_screen, current, selected));
+
+    if (zmk_display_is_initialized()) {
+        k_work_submit_to_queue(zmk_display_work_q(), &screen_change_work);
+    }
+
+    return 0;
+}
 
 /**
  * Draw buffers
  **/
 
-static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+static void draw_top(lv_obj_t *widget, const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
     fill_background(canvas);
 
@@ -64,15 +86,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
         return;
     }
 
-    // Draw widgets
-    draw_output_status(canvas, state);
-    #if defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 2
-    draw_chart_status(canvas, state);
-    #endif
-    draw_layer_status(canvas, state);
-    draw_profile_status(canvas, state);
-    draw_battery_status(canvas, state);
-    draw_battery_peripheral_status(canvas, state);
+    draw_toucan_status_layout(canvas, state, active_screen);
 }
 
 /**
@@ -86,7 +100,7 @@ static void set_battery_status(struct zmk_widget_screen *widget,
 #endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
     widget->state.battery = state.level;
 
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_top(widget->obj, &widget->state);
 }
 
 static void battery_status_update_cb(struct battery_status_state state) {
@@ -124,7 +138,7 @@ static void set_battery_peripheral_status(struct zmk_widget_screen *widget,
     zmk_split_central_get_peripheral_battery_level(0, &level);
 
     widget->state.battery_p = level;
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_top(widget->obj, &widget->state);
 }
 
 static void battery_peripheral_status_update_cb(struct battery_peripheral_status_state state) {
@@ -156,7 +170,7 @@ ZMK_SUBSCRIPTION(widget_battery_peripheral_status, zmk_peripheral_battery_state_
 
 static void set_layer_status(struct zmk_widget_screen *widget, struct layer_status_state state) {
     widget->state.layer_index = zmk_keymap_highest_layer_active();
-    draw_top(widget->obj, widget->cbuf3, &widget->state);
+    draw_top(widget->obj, &widget->state);
 }
 
 static void layer_status_update_cb(struct layer_status_state state) {
@@ -187,7 +201,7 @@ static void set_output_status(struct zmk_widget_screen *widget,
     widget->state.active_profile_connected = state->active_profile_connected;
     widget->state.active_profile_bonded = state->active_profile_bonded;
 
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_top(widget->obj, &widget->state);
 }
 
 static void output_status_update_cb(struct output_status_state state) {
@@ -222,7 +236,7 @@ ZMK_SUBSCRIPTION(widget_output_status, zmk_ble_active_profile_changed);
 static void force_redraw_all_widgets(void) {
     struct zmk_widget_screen *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        draw_top(widget->obj, widget->cbuf, &widget->state);
+        draw_top(widget->obj, &widget->state);
     }
 }
 
@@ -255,13 +269,12 @@ static int display_activity_event_handler(const zmk_event_t *eh) {
 ZMK_LISTENER(nice_view_gem_display, display_activity_event_handler);
 ZMK_SUBSCRIPTION(nice_view_gem_display, zmk_activity_state_changed);
 
-#if defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 2
 /**
  * WPM status
  */
-    static void set_chart_status(struct zmk_widget_screen *widget, struct chart_status_state state) {
+static void set_chart_status(struct zmk_widget_screen *widget, struct chart_status_state state) {
     widget->state.wpm = state.wpm;
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_top(widget->obj, &widget->state);
 }
 
 static void chart_status_update_cb(struct chart_status_state state) {
@@ -281,13 +294,13 @@ static struct chart_status_state chart_status_get_state(const zmk_event_t *eh) {
 ZMK_DISPLAY_WIDGET_LISTENER(widget_chart_status, struct chart_status_state,
                             chart_status_update_cb, chart_status_get_state);
 ZMK_SUBSCRIPTION(widget_chart_status, zmk_wpm_state_changed);
-#endif
 
 /**
  * Initialization
  **/
 
 int zmk_widget_screen_init(struct zmk_widget_screen *widget, lv_obj_t *parent) {
+    active_screen = (uint8_t)atomic_get(&requested_screen);
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -301,9 +314,7 @@ int zmk_widget_screen_init(struct zmk_widget_screen *widget, lv_obj_t *parent) {
     widget_layer_status_init();
     widget_output_status_init();
 
-    #if defined(CONFIG_TOUCAN_STATUS_SCREEN) && CONFIG_TOUCAN_STATUS_SCREEN == 2
     widget_chart_status_init();
-    #endif
 
     return 0;
 }

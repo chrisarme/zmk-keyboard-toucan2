@@ -31,6 +31,7 @@ static void draw_level_peripheral(lv_obj_t *canvas, const struct status_state *s
     }
 }
 
-void draw_battery_peripheral_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_battery_peripheral_standard_status(lv_obj_t *canvas,
+                                             const struct status_state *state) {
     draw_level_peripheral(canvas, state);
 }

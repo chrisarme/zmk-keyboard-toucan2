@@ -32,6 +32,6 @@ static void draw_level(lv_obj_t *canvas, const struct status_state *state) {
 
 }
 
-void draw_battery_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_battery_standard_status(lv_obj_t *canvas, const struct status_state *state) {
     draw_level(canvas, state);
 }

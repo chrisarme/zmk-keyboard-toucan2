@@ -10,6 +10,7 @@ from preview_gui import PreviewState, build_renderer_command
 class RendererCommandTests(unittest.TestCase):
     def test_maps_the_complete_gui_state_to_renderer_options(self):
         state = PreviewState(
+            screen=1,
             left_battery=82,
             right_battery=37,
             wpm=64,
@@ -28,6 +29,8 @@ class RendererCommandTests(unittest.TestCase):
             command,
             [
                 "renderer.exe",
+                "--screen",
+                "1",
                 "--left-battery",
                 "82",
                 "--right-battery",

@@ -13,7 +13,7 @@ LV_IMG_DECLARE(toucan_logo);
 
 
 
-void draw_layer_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_layer_logo_status(lv_obj_t *canvas, const struct status_state *state) {
     lv_draw_img_dsc_t img_dsc_l;
     lv_draw_img_dsc_init(&img_dsc_l);
     int x = (SCREEN_WIDTH - toucan_logo.header.w) / 2;

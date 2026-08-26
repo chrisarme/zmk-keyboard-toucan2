@@ -1,0 +1,5 @@
+description: Select or cycle the Toucan status screen
+
+compatible: "zmk,behavior-toucan-screen"
+
+include: one_param.yaml

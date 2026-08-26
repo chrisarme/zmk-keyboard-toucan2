@@ -22,16 +22,25 @@ add_executable(
   toucan_widget_simulator
   src/main.c
   src/zmk_shims.c
+  ${TOUCAN_WIDGET_DIR}/battery.c
   ${TOUCAN_WIDGET_DIR}/battery_arc.c
+  ${TOUCAN_WIDGET_DIR}/battery_peripheral.c
   ${TOUCAN_WIDGET_DIR}/battery_arc_peripheral.c
   ${TOUCAN_WIDGET_DIR}/chart.c
+  ${TOUCAN_WIDGET_DIR}/layer.c
   ${TOUCAN_WIDGET_DIR}/layer_arc.c
+  ${TOUCAN_WIDGET_DIR}/layer_logo.c
+  ${TOUCAN_WIDGET_DIR}/output.c
   ${TOUCAN_WIDGET_DIR}/output_arc.c
+  ${TOUCAN_WIDGET_DIR}/profile.c
   ${TOUCAN_WIDGET_DIR}/profile_arc.c
+  ${TOUCAN_WIDGET_DIR}/screen_layout.c
   ${TOUCAN_WIDGET_DIR}/util.c
+  ${TOUCAN_ASSET_DIR}/images.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c
+  ${TOUCAN_ASSET_DIR}/quinquefive_24.c
 )
 
 target_include_directories(
@@ -54,6 +63,7 @@ target_compile_definitions(
     CONFIG_ZMK_SPLIT=0
     CONFIG_ZMK_SPLIT_ROLE_CENTRAL=1
     CONFIG_USB_DEVICE_STACK=0
+    CONFIG_TOUCAN_STATUS_SCREEN=2
     _CRT_SECURE_NO_WARNINGS
 )
 
@@ -61,6 +71,17 @@ target_link_libraries(toucan_widget_simulator PRIVATE lvgl)
 
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_executable(
+    screen_selection_test
+    tests/test_screen_selection.c
+    ../../src/screen_selection.c
+  )
+  target_include_directories(
+    screen_selection_test
+    PRIVATE
+      ../../include
+  )
+  add_test(NAME resolves_runtime_screen_commands COMMAND screen_selection_test)
   add_test(
     NAME renders_battery_arc_state
     COMMAND
@@ -82,5 +103,13 @@ if(BUILD_TESTING)
     COMMAND
       ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_preview_gui.py
+  )
+  add_test(
+    NAME renders_all_runtime_screen_styles
+    COMMAND
+      ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/verify_screen_styles.py
+      $<TARGET_FILE:toucan_widget_simulator>
+      ${CMAKE_CURRENT_BINARY_DIR}/screen-styles
   )
 endif()

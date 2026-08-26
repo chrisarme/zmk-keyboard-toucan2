@@ -57,7 +57,7 @@ static void draw_battery_labels(lv_obj_t *canvas, uint8_t level)
     lv_canvas_draw_text(canvas, 9, 45, 56, &label_dsc_txt, buf);
 }
 
-void draw_battery_status(lv_obj_t *canvas, const struct status_state *state) {
+void draw_battery_arc_status(lv_obj_t *canvas, const struct status_state *state) {
     draw_battery_arc(canvas, bat_dots_left, state->battery, true);
     draw_battery_labels(canvas, state->battery);
 }
