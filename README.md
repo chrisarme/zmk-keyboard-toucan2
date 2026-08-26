@@ -9,6 +9,11 @@
 - **Swipe shortcuts**: the `swipe_button_mapper` node in [boards/shields/toucan/toucan.dtsi](boards/shields/toucan/toucan.dtsi)
 - **Invert scroll / trackpad settings**: the `tps43_trackpad` node in [boards/shields/toucan/toucan_right.overlay](boards/shields/toucan/toucan_right.overlay)
 
+# Development tools
+
+- [Display asset previewer](tools/toucan_art/README.md) converts embedded one-bit LVGL image assets into ordinary PNG files and an HTML gallery.
+- [Widget simulator](tools/toucan_widget_simulator/README.md) renders real Toucan LVGL widgets locally without flashing the keyboard.
+
 # License
 
 The code in this repo is available under the MIT license.
