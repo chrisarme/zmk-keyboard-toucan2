@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <dt-bindings/zmk/toucan_screen.h>
@@ -16,6 +17,13 @@ int main(void) {
   assert(selected == 2);
   assert(toucan_screen_resolve(1, 99, &selected) == -EINVAL);
   assert(selected == 2);
+
+  selected = 99;
+  assert(toucan_screen_restore(1, &selected) == 0);
+  assert(selected == 1);
+  assert(toucan_screen_restore(TOUCAN_SCREEN_COUNT, &selected) == -EINVAL);
+  assert(selected == 1);
+  assert(toucan_screen_restore(0, NULL) == -EINVAL);
 
   return 0;
 }

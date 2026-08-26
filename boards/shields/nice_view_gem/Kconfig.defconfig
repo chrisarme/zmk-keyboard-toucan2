@@ -5,6 +5,11 @@ config TOUCAN_STATUS_SCREEN
     default 2
     range 0 2
 
+config TOUCAN_STATUS_SCREEN_PERSIST
+    bool "Persist the selected status screen"
+    default y
+    depends on SETTINGS
+
 config LV_Z_VDB_SIZE
     default 100
 

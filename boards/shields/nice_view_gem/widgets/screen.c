@@ -1,6 +1,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
+#if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+#include <zephyr/settings/settings.h>
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -45,6 +49,54 @@ static uint8_t active_screen = CONFIG_TOUCAN_STATUS_SCREEN;
 
 static void force_redraw_all_widgets(void);
 
+#if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+static void screen_save_work_cb(struct k_work *work) {
+    ARG_UNUSED(work);
+
+    uint8_t screen = (uint8_t)atomic_get(&requested_screen);
+    int err = settings_save_one("toucan/screen", &screen, sizeof(screen));
+    if (err < 0) {
+        LOG_WRN("Failed to persist status screen: %d", err);
+    }
+}
+
+K_WORK_DELAYABLE_DEFINE(screen_save_work, screen_save_work_cb);
+
+static int screen_settings_load_cb(const char *name, size_t len,
+                                   settings_read_cb read_cb, void *cb_arg) {
+    const char *next;
+    uint8_t persisted_screen;
+    uint8_t selected_screen;
+
+    if (!settings_name_steq(name, "screen", &next) || next != NULL) {
+        return -ENOENT;
+    }
+
+    if (len != sizeof(persisted_screen)) {
+        LOG_WRN("Ignoring invalid persisted status screen length: %u", (unsigned int)len);
+        return 0;
+    }
+
+    int err = read_cb(cb_arg, &persisted_screen, sizeof(persisted_screen));
+    if (err != sizeof(persisted_screen)) {
+        LOG_WRN("Ignoring unreadable persisted status screen: %d", err);
+        return 0;
+    }
+
+    err = toucan_screen_restore(persisted_screen, &selected_screen);
+    if (err < 0) {
+        LOG_WRN("Ignoring invalid persisted status screen: %u", persisted_screen);
+        return 0;
+    }
+
+    atomic_set(&requested_screen, selected_screen);
+    return 0;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(toucan_screen, "toucan", NULL, screen_settings_load_cb, NULL,
+                               NULL);
+#endif
+
 static void screen_change_work_cb(struct k_work *work) {
     ARG_UNUSED(work);
     active_screen = (uint8_t)atomic_get(&requested_screen);
@@ -64,7 +116,14 @@ int toucan_screen_request(uint32_t command) {
         if (err < 0) {
             return err;
         }
+        if (current == selected) {
+            return 0;
+        }
     } while (!atomic_cas(&requested_screen, current, selected));
+
+#if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+    k_work_reschedule(&screen_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
+#endif
 
     if (zmk_display_is_initialized()) {
         k_work_submit_to_queue(zmk_display_work_q(), &screen_change_work);
