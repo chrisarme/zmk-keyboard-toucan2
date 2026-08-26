@@ -3,12 +3,8 @@
 
 uint8_t toucan_animation_fps(uint8_t screen) {
   switch (screen) {
-  case TOUCAN_SCREEN_4:
-    return 2;
-  case TOUCAN_SCREEN_5:
-    return 5;
-  case TOUCAN_SCREEN_6:
-    return 10;
+  case TOUCAN_SCREEN_3:
+    return 8;
   default:
     return 0;
   }

@@ -45,13 +45,11 @@ def main():
 
     frames = [
         render(executable, output_dir / f"screen-{screen}.bmp", screen)
-        for screen in range(7)
+        for screen in range(4)
     ]
     encoded = [tuple(pixel for row in frame for pixel in row) for frame in frames]
     if len(set(encoded[:4])) != 4:
         raise AssertionError("screens 0, 1, 2, and 3 should render four distinct frames")
-    if not (frames[4] == frames[5] == frames[6]):
-        raise AssertionError("animation validation screens should share artwork and differ only by FPS")
     artwork_pixels = [pixel for row in frames[3][:144] for pixel in row]
     if (0, 0, 0) not in artwork_pixels or (255, 255, 255) not in artwork_pixels:
         raise AssertionError("screen 3 artwork should contain both dark and light pixels")
@@ -60,7 +58,7 @@ def main():
     if frames[3][145][44] != (255, 255, 255):
         raise AssertionError("screen 3 footer should use the standard light background")
 
-    alternate_image_frame = render(
+    alternate_status_frame = render(
         executable,
         output_dir / "screen-3-alternate-state.bmp",
         3,
@@ -77,9 +75,9 @@ def main():
             "usb",
         ],
     )
-    if alternate_image_frame[:144] != frames[3][:144]:
+    if alternate_status_frame[:144] != frames[3][:144]:
         raise AssertionError("screen 3 artwork should not change with status state")
-    if alternate_image_frame[144:] == frames[3][144:]:
+    if alternate_status_frame[144:] == frames[3][144:]:
         raise AssertionError("screen 3 footer should update with battery and profile state")
 
     footer_regions = {
@@ -103,13 +101,13 @@ def main():
 
     next_animation_frame = render(
         executable,
-        output_dir / "screen-4-frame-1.bmp",
-        4,
+        output_dir / "screen-3-frame-1.bmp",
+        3,
         ["--animation-frame", "1"],
     )
-    if next_animation_frame[:144] == frames[4][:144]:
+    if next_animation_frame[:144] == frames[3][:144]:
         raise AssertionError("animation frame selection should change the artwork region")
-    if next_animation_frame[144:] != frames[4][144:]:
+    if next_animation_frame[144:] != frames[3][144:]:
         raise AssertionError("animation frame selection should not change the status footer")
 
 

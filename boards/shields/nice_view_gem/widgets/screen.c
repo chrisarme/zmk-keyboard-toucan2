@@ -40,7 +40,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <toucan/animation.h>
 #include <toucan/screen_selection.h>
 
-extern const uint8_t fps_validation_frame_count;
+extern const uint8_t naotogif_frame_count;
 
 struct connection_status_state {
     bool connected;
@@ -64,7 +64,7 @@ static void animation_work_cb(struct k_work *work) {
     }
 
     animation_frame =
-        toucan_animation_next_frame(animation_frame, fps_validation_frame_count);
+        toucan_animation_next_frame(animation_frame, naotogif_frame_count);
     force_redraw_all_widgets();
     update_animation_schedule();
 }

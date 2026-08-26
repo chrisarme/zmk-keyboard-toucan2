@@ -127,7 +127,7 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
 static void print_usage(const char *program) {
     fprintf(stderr,
             "Usage: %s [--left-battery 0..100] [--right-battery 0..100] "
-            "[--screen 0..6] [--animation-frame 0..127] "
+            "[--screen 0..3] [--animation-frame 0..127] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
             "[--left-charging] [--right-charging] --output preview.bmp\n",
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
 
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "--screen") == 0 && index + 1 < argc) {
-            options.screen = parse_bounded_integer(argv[++index], "--screen", 6);
+            options.screen = parse_bounded_integer(argv[++index], "--screen", 3);
             if (options.screen < 0) return 2;
         } else if (strcmp(argv[index], "--animation-frame") == 0 && index + 1 < argc) {
             options.animation_frame =
