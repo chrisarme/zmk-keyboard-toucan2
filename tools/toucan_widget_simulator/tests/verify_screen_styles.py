@@ -45,11 +45,13 @@ def main():
 
     frames = [
         render(executable, output_dir / f"screen-{screen}.bmp", screen)
-        for screen in range(4)
+        for screen in range(7)
     ]
     encoded = [tuple(pixel for row in frame for pixel in row) for frame in frames]
-    if len(set(encoded)) != 4:
+    if len(set(encoded[:4])) != 4:
         raise AssertionError("screens 0, 1, 2, and 3 should render four distinct frames")
+    if not (frames[4] == frames[5] == frames[6]):
+        raise AssertionError("animation validation screens should share artwork and differ only by FPS")
     artwork_pixels = [pixel for row in frames[3][:144] for pixel in row]
     if (0, 0, 0) not in artwork_pixels or (255, 255, 255) not in artwork_pixels:
         raise AssertionError("screen 3 artwork should contain both dark and light pixels")
@@ -98,6 +100,17 @@ def main():
         )
         if dark_pixels == 0 or light_pixels == 0:
             raise AssertionError(f"screen 3 footer should visibly render {name}")
+
+    next_animation_frame = render(
+        executable,
+        output_dir / "screen-4-frame-1.bmp",
+        4,
+        ["--animation-frame", "1"],
+    )
+    if next_animation_frame[:144] == frames[4][:144]:
+        raise AssertionError("animation frame selection should change the artwork region")
+    if next_animation_frame[144:] != frames[4][144:]:
+        raise AssertionError("animation frame selection should not change the status footer")
 
 
 if __name__ == "__main__":

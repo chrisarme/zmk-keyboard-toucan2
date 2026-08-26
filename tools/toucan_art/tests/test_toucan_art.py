@@ -283,6 +283,278 @@ class ExtractCommandTests(unittest.TestCase):
 
 
 class ConvertCommandTests(unittest.TestCase):
+    def test_converts_animated_gif_to_frame_table_and_preview(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "blink.gif"
+            output_dir = temp / "generated"
+            first = Image.new("RGB", (2, 1), "black")
+            second = Image.new("RGB", (2, 1), "white")
+            first.save(
+                source_path,
+                save_all=True,
+                append_images=[second],
+                duration=[200, 200],
+                loop=0,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--size",
+                    "2x1",
+                    "--fit",
+                    "stretch",
+                    "--fps",
+                    "5",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_text = (output_dir / "blink.c").read_text(encoding="utf-8")
+            self.assertIn("blink_frame_000", c_text)
+            self.assertIn("blink_frame_001", c_text)
+            self.assertIn("const lv_img_dsc_t *const blink_frames[]", c_text)
+            self.assertIn("const uint8_t blink_frame_count = 2", c_text)
+            self.assertIn("const uint32_t blink_duration_ms = 400", c_text)
+            self.assertTrue((output_dir / "blink.preview.gif").is_file())
+            self.assertIn("2 frames", result.stdout)
+            self.assertIn("18 data bytes", result.stdout)
+
+    def test_warns_when_animation_rate_exceeds_keyboard_recommendation(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "fast.gif"
+            first = Image.new("RGB", (1, 1), "black")
+            second = Image.new("RGB", (1, 1), "white")
+            first.save(
+                source_path,
+                save_all=True,
+                append_images=[second],
+                duration=[500, 500],
+                loop=0,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "generated"),
+                    "--size",
+                    "1x1",
+                    "--fps",
+                    "12",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("above the 10 FPS keyboard validation range", result.stderr)
+
+    def test_frame_cap_preserves_cycle_and_reports_effective_rate(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "capped.gif"
+            frames = [
+                Image.new("RGB", (2, 2), color)
+                for color in ("black", "white", "black", "white")
+            ]
+            frames[0].save(
+                source_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=[250, 250, 250, 250],
+                loop=0,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "generated"),
+                    "--size",
+                    "2x2",
+                    "--fps",
+                    "10",
+                    "--max-frames",
+                    "3",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_text = (temp / "generated" / "capped.c").read_text(encoding="utf-8")
+            self.assertIn("const uint8_t capped_frame_count = 3", c_text)
+            self.assertIn("const uint32_t capped_duration_ms = 1000", c_text)
+            self.assertIn("limited to 3 frames", result.stderr)
+            self.assertIn("effective 3.00 FPS", result.stderr)
+
+    def test_sampling_covers_partial_final_frame_interval(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "half_second.gif"
+            frames = [Image.new("RGB", (1, 1), color) for color in ("black", "white")]
+            frames[0].save(
+                source_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=[250, 250],
+                loop=0,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "generated"),
+                    "--size",
+                    "1x1",
+                    "--fps",
+                    "5",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_text = (temp / "generated" / "half_second.c").read_text(encoding="utf-8")
+            self.assertIn("const uint8_t half_second_frame_count = 3", c_text)
+
+    def test_selects_a_timed_segment_before_sampling(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "segment.gif"
+            frames = [
+                Image.new("RGB", (1, 1), color)
+                for color in ("black", "white", "black", "white")
+            ]
+            frames[0].save(
+                source_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=[250, 250, 250, 250],
+                loop=0,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "generated"),
+                    "--size",
+                    "1x1",
+                    "--fps",
+                    "4",
+                    "--start-time",
+                    "250",
+                    "--duration",
+                    "500",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            c_text = (temp / "generated" / "segment.c").read_text(encoding="utf-8")
+            self.assertIn("const uint8_t segment_frame_count = 2", c_text)
+            self.assertIn("const uint32_t segment_duration_ms = 500", c_text)
+            with Image.open(temp / "generated" / "segment.preview.gif") as preview:
+                self.assertEqual(preview.convert("RGB").getpixel((0, 0)), (255, 255, 255))
+                preview.seek(1)
+                self.assertEqual(preview.convert("RGB").getpixel((0, 0)), (0, 0, 0))
+
+    def test_composites_partial_gif_frames_using_disposal_rules(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "disposal.gif"
+            palette = [255, 0, 255, 255, 255, 255, 0, 0, 0] + [0, 0, 0] * 253
+            frames = []
+            for pixels in ([2, 1, 1], [0, 2, 0], [0, 0, 2]):
+                frame = Image.new("P", (3, 1))
+                frame.putpalette(palette)
+                frame.putdata(pixels)
+                frames.append(frame)
+            frames[0].save(
+                source_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=[200, 200, 200],
+                loop=0,
+                transparency=0,
+                background=1,
+                disposal=[2, 1, 1],
+                optimize=False,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(temp / "generated"),
+                    "--size",
+                    "3x1",
+                    "--fit",
+                    "stretch",
+                    "--fps",
+                    "5",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = [
+                [(0, 0, 0), (255, 255, 255), (255, 255, 255)],
+                [(255, 255, 255), (0, 0, 0), (255, 255, 255)],
+                [(255, 255, 255), (0, 0, 0), (0, 0, 0)],
+            ]
+            with Image.open(temp / "generated" / "disposal.preview.gif") as preview:
+                for index, pixels in enumerate(expected):
+                    preview.seek(index)
+                    self.assertEqual(
+                        [preview.convert("RGB").getpixel((x, 0)) for x in range(3)],
+                        pixels,
+                    )
+
     def test_converts_to_c_and_builds_preview_from_round_tripped_bytes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)

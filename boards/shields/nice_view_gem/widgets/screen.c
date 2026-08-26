@@ -37,7 +37,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include "sleep.h"
 
 #include <toucan/screen.h>
+#include <toucan/animation.h>
 #include <toucan/screen_selection.h>
+
+extern const uint8_t fps_validation_frame_count;
 
 struct connection_status_state {
     bool connected;
@@ -45,9 +48,43 @@ struct connection_status_state {
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static atomic_t requested_screen = ATOMIC_INIT(CONFIG_TOUCAN_STATUS_SCREEN);
+static atomic_t animation_activity_active = ATOMIC_INIT(1);
 static uint8_t active_screen = CONFIG_TOUCAN_STATUS_SCREEN;
+static uint8_t animation_frame;
 
 static void force_redraw_all_widgets(void);
+static void update_animation_schedule(void);
+
+static void animation_work_cb(struct k_work *work) {
+    ARG_UNUSED(work);
+
+    if (!atomic_get(&animation_activity_active) ||
+        toucan_animation_fps(active_screen) == 0) {
+        return;
+    }
+
+    animation_frame =
+        toucan_animation_next_frame(animation_frame, fps_validation_frame_count);
+    force_redraw_all_widgets();
+    update_animation_schedule();
+}
+
+K_WORK_DELAYABLE_DEFINE(animation_work, animation_work_cb);
+
+static void update_animation_schedule(void) {
+    uint32_t interval_ms = toucan_animation_interval_ms(active_screen);
+    if (!atomic_get(&animation_activity_active) || interval_ms == 0) {
+        /* A queued callback may still run, but it rechecks both conditions above. */
+        (void)k_work_cancel_delayable(&animation_work);
+        return;
+    }
+
+    int result = k_work_reschedule_for_queue(
+        zmk_display_work_q(), &animation_work, K_MSEC(interval_ms));
+    if (result < 0) {
+        LOG_WRN("Failed to schedule display animation: %d", result);
+    }
+}
 
 #if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
 static void screen_save_work_cb(struct k_work *work) {
@@ -100,7 +137,9 @@ SETTINGS_STATIC_HANDLER_DEFINE(toucan_screen, "toucan", NULL, screen_settings_lo
 static void screen_change_work_cb(struct k_work *work) {
     ARG_UNUSED(work);
     active_screen = (uint8_t)atomic_get(&requested_screen);
+    animation_frame = 0;
     force_redraw_all_widgets();
+    update_animation_schedule();
 }
 
 K_WORK_DEFINE(screen_change_work, screen_change_work_cb);
@@ -145,7 +184,7 @@ static void draw_top(lv_obj_t *widget, const struct status_state *state) {
         return;
     }
 
-    draw_toucan_status_layout(canvas, state, active_screen);
+    draw_toucan_status_layout(canvas, state, active_screen, animation_frame);
 }
 
 /**
@@ -307,11 +346,23 @@ static int display_activity_event_handler(const zmk_event_t *eh) {
 
     switch (ev->state) {
     case ZMK_ACTIVITY_ACTIVE:
+        atomic_set(&animation_activity_active, 1);
         set_sleep_screen_active(false);
-        // No need to force a redraw, it will happen automatically if really coming back from sleep (ACTIVE also comes after IDLE)
-        //force_redraw_all_widgets();
+        if (zmk_display_is_initialized()) {
+            int result =
+                k_work_submit_to_queue(zmk_display_work_q(), &screen_change_work);
+            if (result < 0) {
+                LOG_WRN("Failed to resume display animation: %d", result);
+            }
+        }
+        break;
+    case ZMK_ACTIVITY_IDLE:
+        atomic_clear(&animation_activity_active);
+        update_animation_schedule();
         break;
     case ZMK_ACTIVITY_SLEEP:
+        atomic_clear(&animation_activity_active);
+        update_animation_schedule();
         set_sleep_screen_active(true);
         force_redraw_all_widgets();
         // Force LVGL to process pending updates and flush to display hardware
@@ -374,6 +425,8 @@ int zmk_widget_screen_init(struct zmk_widget_screen *widget, lv_obj_t *parent) {
     widget_output_status_init();
 
     widget_chart_status_init();
+
+    update_animation_schedule();
 
     return 0;
 }

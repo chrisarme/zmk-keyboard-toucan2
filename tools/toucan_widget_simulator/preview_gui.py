@@ -12,6 +12,7 @@ from tkinter import ttk
 @dataclass(frozen=True)
 class PreviewState:
     screen: int = 2
+    animation_frame: int = 0
     left_battery: int = 75
     right_battery: int = 50
     wpm: int = 0
@@ -31,6 +32,8 @@ def build_renderer_command(
         str(renderer),
         "--screen",
         str(state.screen),
+        "--animation-frame",
+        str(state.animation_frame),
         "--left-battery",
         str(state.left_battery),
         "--right-battery",
@@ -103,6 +106,7 @@ class PreviewApp:
         self.output = self.base_dir / "previews" / "gui-preview.bmp"
         self.pending_render: str | None = None
         self.preview_image: tk.PhotoImage | None = None
+        self.animation_frame = 0
 
         self.screen = tk.IntVar(value=2)
         self.left_battery = tk.IntVar(value=75)
@@ -215,7 +219,7 @@ class PreviewApp:
         )
         ttk.Combobox(
             controls,
-            values=(0, 1, 2, 3),
+            values=(0, 1, 2, 3, 4, 5, 6),
             state="readonly",
             width=5,
             textvariable=self.screen,
@@ -346,6 +350,7 @@ class PreviewApp:
     def current_state(self) -> PreviewState:
         return PreviewState(
             screen=self.screen.get(),
+            animation_frame=self.animation_frame,
             left_battery=self.left_battery.get(),
             right_battery=self.right_battery.get(),
             wpm=self.wpm.get(),
@@ -397,7 +402,16 @@ class PreviewApp:
             self.preview_image = source.zoom(3, 3)
             self.canvas.delete("all")
             self.canvas.create_image(216, 252, image=self.preview_image)
-            self.status.set("FRAME CURRENT")
+            animation_fps = {4: 2, 5: 5, 6: 10}.get(self.screen.get())
+            if animation_fps:
+                self.status.set(f"ANIMATION // {animation_fps} FPS")
+                self.animation_frame = (self.animation_frame + 1) % 8
+                self.pending_render = self.root.after(
+                    round(1000 / animation_fps), self.render_preview
+                )
+            else:
+                self.animation_frame = 0
+                self.status.set("FRAME CURRENT")
         except (OSError, ValueError, tk.TclError) as error:
             self.status.set(f"DISPLAY ERROR: {error}".upper())
 

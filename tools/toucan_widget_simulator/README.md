@@ -1,6 +1,6 @@
 # Toucan widget simulator
 
-This host-side tool renders any of the Toucan's four screens into a 144×168 monochrome BMP without building or flashing the keyboard firmware. It uses the same LVGL revision as this ZMK version and compiles the real widget, image, and font sources from the shield.
+This host-side tool renders any Toucan screen or generated animation frame into a 144×168 monochrome BMP without building or flashing the keyboard firmware. It uses the same LVGL revision as this ZMK version and compiles the real widget, image, and font sources from the shield.
 
 It provides both a command-line renderer and an interactive desktop preview. It is not a full emulation of ZMK events or display hardware.
 
@@ -31,7 +31,7 @@ Build the renderer once, then launch the desktop control panel:
 python tools/toucan_widget_simulator/preview_gui.py
 ```
 
-The window magnifies the physical 144×168 display to 432×504. Screen style, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
+The window magnifies the physical 144×168 display to 432×504. Screen style, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. Screens 4, 5, and 6 animate the same validation artwork at 2, 5, and 10 FPS. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
 
 **Layer #** is the zero-based layer number used internally by ZMK. When **Name** is filled in, that name is displayed and the number has no visible effect. When **Name** is blank, the screen uses the number as a fallback label such as `L#2`.
 
@@ -58,7 +58,8 @@ Build products and generated previews are ignored by Git.
 
 | Option | Accepted values | Default | Effect |
 | --- | --- | --- | --- |
-| `--screen` | 0–3 | 2 | Layout: standard, Toucan logo, arcs/WPM, or Naoto art with a status footer |
+| `--screen` | 0–6 | 2 | Screens 0–3 are status/static layouts; Screens 4–6 are the 2/5/10 FPS animation validation modes |
+| `--animation-frame` | 0–127 | 0 | Generated animation frame to render for a one-shot BMP |
 | `--left-battery` | 0–100 | 75 | Left-half battery percentage |
 | `--right-battery` | 0–100 | 50 | Right-half battery percentage |
 | `--wpm` | 0–255 | 0 | Adds the newest sample to the WPM chart |
@@ -79,10 +80,10 @@ The current battery widgets do not draw a charging glyph, so the charging flags 
 ctest --test-dir tools/toucan_widget_simulator/build --output-on-failure
 ```
 
-The tests check runtime selection commands, output dimensions, battery fill behavior, every supported screen layout, and the GUI-to-renderer state mapping.
+The tests check runtime selection commands and animation rates, output dimensions, battery fill behavior, every supported screen layout and generated animation frames, and the GUI-to-renderer state mapping.
 
 ## How it relates to the firmware
 
 The executable creates an in-memory LVGL canvas at the display's real resolution, calls the same runtime layout dispatcher used by the firmware, then exports the canvas. Small compatibility headers stand in for the Zephyr and ZMK types those widgets expect on-device.
 
-This makes widget layout and drawing logic representative of the firmware. It does not currently simulate timers, input events, display refresh behavior, or ZMK's event system. The command-line values are injected directly as one status snapshot.
+This makes widget layout and drawing logic representative of the firmware. The GUI schedules animation frames at the same requested rates for visual comparison, but it does not emulate ZMK's work queue, input events, SPI transfer time, idle/sleep events, or battery use. The command-line values are injected directly as one status snapshot.

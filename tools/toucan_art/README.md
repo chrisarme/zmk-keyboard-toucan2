@@ -1,12 +1,12 @@
 # Toucan Art Utility
 
-This standalone development utility converts ordinary static images to the firmware's
-LVGL v8 `LV_IMG_CF_INDEXED_1BIT` C arrays and extracts existing arrays as ordinary indexed
-PNG files. It is located under
+This standalone development utility converts ordinary static images and animated GIFs to
+the firmware's LVGL v8 `LV_IMG_CF_INDEXED_1BIT` C arrays and extracts existing arrays as
+ordinary indexed PNG files. It is located under
 `tools/`, outside the Zephyr module's `boards`, `config`, and `zephyr` source trees, and is
 not included in firmware builds.
 
-Extraction and galleries use only the Python standard library. Static conversion has one
+Extraction and galleries use only the Python standard library. Image conversion has one
 optional dependency, Pillow:
 
 ```powershell
@@ -41,9 +41,9 @@ Pillow image, while presenting their actual appearance on the keyboard. Conversi
 for the panel's reversed logical polarity automatically, so black source pixels appear as
 dark ink while white and transparent background pixels remain light/unfilled by default.
 
-The converter accepts PNG, JPEG, BMP, WebP, and single-frame GIF inputs. Files and
-directories can be mixed; directories are searched recursively. Animated GIFs are rejected
-with an explanatory message and will be handled by the separate animation converter.
+The converter accepts PNG, JPEG, BMP, WebP, and GIF inputs. Files and directories can be
+mixed; directories are searched recursively. Animated GIFs are fully composited according
+to their transparency and disposal rules before being resized and converted.
 
 For example, convert every supported static image under `source-art`:
 
@@ -55,6 +55,28 @@ py -3 tools/toucan_art/toucan_art.py convert source-art `
     --output tools/toucan_art/generated `
     --preview
 ```
+
+## Convert an animated GIF
+
+This creates LVGL descriptors for a 144×144 animation, a flash-resident descriptor table,
+cycle metadata, and an animated preview decoded from the generated C bytes:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py convert animation.gif `
+    --name animation `
+    --size 144x144 `
+    --fit contain `
+    --fps 5 `
+    --max-frames 16 `
+    --output tools/toucan_art/generated `
+    --preview
+```
+
+The outputs are `animation.c` and `animation.preview.gif`. The C file declares one
+descriptor per sampled frame, `animation_frames`, `animation_frame_count`, and
+`animation_duration_ms`. Frames are sampled at a uniform rate because the firmware player
+uses one interval for the complete cycle. Source frames with varying durations are sampled
+on their original timeline.
 
 ### Conversion controls
 
@@ -72,6 +94,13 @@ py -3 tools/toucan_art/toucan_art.py convert source-art `
   one-bit dot pattern. The default is `none`, which is generally cleaner for logos and pixel
   art.
 - `--invert` intentionally swaps the final visible dark and light pixels.
+- `--fps 1..30` selects the animated GIF sampling rate. The default is 5 FPS. Rates above
+  10 FPS produce a hardware-validation warning; 30 FPS is the hard converter ceiling.
+- `--max-frames 1..127` caps animation flash use. The default is 16. If the cap is reached,
+  the complete selected time range is sampled evenly and its cycle duration is preserved,
+  so the effective FPS is reduced and reported.
+- `--start-time MS` skips the beginning of an animated GIF before sampling.
+- `--duration MS` limits conversion to a segment beginning at `--start-time`.
 - `--name` supplies an explicit C identifier and is allowed only for a single input image.
   Without it, filenames are converted to safe identifiers such as `wide_logo`.
 - `--force` is required to replace an existing generated C file or preview.
@@ -88,8 +117,9 @@ one packed bit per pixel, with every row rounded up to a whole byte:
 8 + ceil(width / 8) × height
 ```
 
-A full-screen 144×168 image therefore uses 3,032 data bytes in firmware. Multiple static
-images consume that amount independently.
+A full-screen 144×168 image therefore uses 3,032 data bytes in firmware. A 144×144 frame
+uses 2,600 bytes, so an eight-frame animation uses 20,800 image-data bytes plus small
+descriptor metadata. The command reports total image data, frame count, and cycle duration.
 
 Generated output is staged under `tools/toucan_art/generated` by convention and is not added
 to the firmware build automatically. After reviewing the preview, copy or move the chosen C
@@ -148,7 +178,19 @@ Install the optional conversion dependency first if conversion tests will be run
 py -3 -m unittest discover -s tools/toucan_art/tests -v
 ```
 
-## Current scope
+## Animation rate guidance
 
-The utility extracts existing one-bit LVGL C assets and converts static images to the same
-format. Animated GIF frame conversion remains planned separately.
+Five FPS and 16 frames are conservative starting defaults for a wireless keyboard. The
+converter warns above 10 FPS because higher rates should be justified with physical input,
+sleep, and power testing. The included `fps_validation.gif` sample is used by temporary
+2, 5, and 10 FPS firmware screens so those rates can be compared with identical artwork.
+
+The Sharp panel supports continuous serial frame timing near 60 Hz, but that is an
+electrical ceiling rather than a battery recommendation. Its datasheet characterizes power
+at one full update per second and gives approximately 10–20 ms black/white optical response
+times. Firmware validation therefore focuses on 2–10 FPS rather than the panel maximum.
+
+References:
+
+- Sharp LS013B7DH05 specification: <https://d7rh5s3nxmpy4.cloudfront.net/CMP7377/files/LS013B7DH05_15Jun15_Spec_LD-27503A.pdf>
+- Pillow GIF disposal and duration behavior: <https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif>

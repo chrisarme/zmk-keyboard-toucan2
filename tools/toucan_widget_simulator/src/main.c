@@ -16,6 +16,7 @@ static lv_color_t canvas_pixels[SCREEN_WIDTH * SCREEN_HEIGHT];
 
 struct preview_options {
     int screen;
+    int animation_frame;
     int left_battery;
     int right_battery;
     int wpm;
@@ -126,7 +127,7 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
 static void print_usage(const char *program) {
     fprintf(stderr,
             "Usage: %s [--left-battery 0..100] [--right-battery 0..100] "
-            "[--screen 0..3] "
+            "[--screen 0..6] [--animation-frame 0..127] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
             "[--left-charging] [--right-charging] --output preview.bmp\n",
@@ -136,6 +137,7 @@ static void print_usage(const char *program) {
 int main(int argc, char **argv) {
     struct preview_options options = {
         .screen = CONFIG_TOUCAN_STATUS_SCREEN,
+        .animation_frame = 0,
         .left_battery = 75,
         .right_battery = 50,
         .wpm = 0,
@@ -151,8 +153,12 @@ int main(int argc, char **argv) {
 
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "--screen") == 0 && index + 1 < argc) {
-            options.screen = parse_bounded_integer(argv[++index], "--screen", 3);
+            options.screen = parse_bounded_integer(argv[++index], "--screen", 6);
             if (options.screen < 0) return 2;
+        } else if (strcmp(argv[index], "--animation-frame") == 0 && index + 1 < argc) {
+            options.animation_frame =
+                parse_bounded_integer(argv[++index], "--animation-frame", 127);
+            if (options.animation_frame < 0) return 2;
         } else if (strcmp(argv[index], "--left-battery") == 0 && index + 1 < argc) {
             options.left_battery = parse_percentage(argv[++index], "--left-battery");
             if (options.left_battery < 0) {
@@ -239,7 +245,8 @@ int main(int argc, char **argv) {
     };
     toucan_simulator_set_layer_name(options.layer_name);
     fill_background(canvas);
-    draw_toucan_status_layout(canvas, &state, (uint8_t)options.screen);
+    draw_toucan_status_layout(canvas, &state, (uint8_t)options.screen,
+                              (uint8_t)options.animation_frame);
 
     int result = write_canvas_bmp(canvas, options.output_path);
     lv_deinit();

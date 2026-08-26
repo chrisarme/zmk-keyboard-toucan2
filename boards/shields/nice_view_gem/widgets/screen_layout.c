@@ -17,6 +17,8 @@
 #include "profile_arc.h"
 
 LV_IMG_DECLARE(naotoframe1);
+extern const lv_img_dsc_t *const fps_validation_frames[];
+extern const uint8_t fps_validation_frame_count;
 
 #define IMAGE_FOOTER_Y 144
 #define IMAGE_PROFILE_X 48
@@ -67,12 +69,8 @@ static void draw_footer_profiles(lv_obj_t *canvas,
   }
 }
 
-static void draw_image_status(lv_obj_t *canvas,
-                              const struct status_state *state) {
-  lv_draw_img_dsc_t image_descriptor;
-  lv_draw_img_dsc_init(&image_descriptor);
-  lv_canvas_draw_img(canvas, 0, 0, &naotoframe1, &image_descriptor);
-
+static void draw_art_footer(lv_obj_t *canvas,
+                            const struct status_state *state) {
   /* Match the other screens: light panel background with dark status ink. */
   draw_footer_rect(canvas, 0, IMAGE_FOOTER_Y, SCREEN_WIDTH,
                    SCREEN_HEIGHT - IMAGE_FOOTER_Y, LVGL_BACKGROUND);
@@ -81,9 +79,29 @@ static void draw_image_status(lv_obj_t *canvas,
   draw_footer_battery(canvas, 104, "R", state->battery_p);
 }
 
+static void draw_image_status(lv_obj_t *canvas,
+                              const struct status_state *state) {
+  lv_draw_img_dsc_t image_descriptor;
+  lv_draw_img_dsc_init(&image_descriptor);
+  lv_canvas_draw_img(canvas, 0, 0, &naotoframe1, &image_descriptor);
+  draw_art_footer(canvas, state);
+}
+
+static void draw_animation_status(lv_obj_t *canvas,
+                                  const struct status_state *state,
+                                  uint8_t animation_frame) {
+  lv_draw_img_dsc_t image_descriptor;
+  lv_draw_img_dsc_init(&image_descriptor);
+  const lv_img_dsc_t *frame =
+      fps_validation_frames[animation_frame % fps_validation_frame_count];
+  lv_canvas_draw_img(canvas, 0, 0, frame, &image_descriptor);
+  draw_art_footer(canvas, state);
+}
+
 void draw_toucan_status_layout(lv_obj_t *canvas,
                                const struct status_state *state,
-                               uint8_t screen) {
+                               uint8_t screen,
+                               uint8_t animation_frame) {
   switch (screen) {
   case 0:
     draw_standard_status(canvas, state);
@@ -103,6 +121,11 @@ void draw_toucan_status_layout(lv_obj_t *canvas,
     break;
   case 3:
     draw_image_status(canvas, state);
+    break;
+  case 4:
+  case 5:
+  case 6:
+    draw_animation_status(canvas, state, animation_frame);
     break;
   default:
     break;

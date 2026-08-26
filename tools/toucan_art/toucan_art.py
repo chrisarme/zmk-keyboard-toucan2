@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import binascii
 import html
+import math
 import re
 import struct
 import sys
@@ -87,6 +88,9 @@ class ConvertedAsset:
     source_path: Path
     c_path: Path
     preview_path: Path | None
+    frame_count: int = 1
+    duration_ms: int | None = None
+    total_data_size: int | None = None
 
 
 def _strip_comments(text: str) -> str:
@@ -199,6 +203,38 @@ def write_physical_preview_png(asset: ImageAsset, output_path: Path) -> None:
             declared_size=asset.declared_size,
         ),
         output_path,
+    )
+
+
+def write_physical_preview_gif(
+    assets: list[ImageAsset], output_path: Path, duration_ms: int
+) -> None:
+    Image, _ = _require_pillow()
+    frames = []
+    for asset in assets:
+        stride = (asset.width + 7) // 8
+        colors = [
+            (255 - red, 255 - green, 255 - blue)
+            for red, green, blue, _alpha in asset.palette
+        ]
+        pixels = []
+        for y in range(asset.height):
+            row = asset.pixels[y * stride : (y + 1) * stride]
+            pixels.extend(colors[(row[x // 8] >> (7 - (x % 8))) & 1] for x in range(asset.width))
+        frame = Image.new("RGB", (asset.width, asset.height))
+        frame.putdata(pixels)
+        frames.append(frame)
+
+    frame_duration = max(1, round(duration_ms / len(frames)))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=frame_duration,
+        loop=0,
+        disposal=2,
+        optimize=False,
     )
 
 
@@ -365,13 +401,27 @@ def _prepare_monochrome_image(
 
     with Image.open(source_path) as opened:
         if getattr(opened, "n_frames", 1) > 1:
-            raise ValueError(
-                f"{source_path}: animated images are reserved for the future GIF converter"
-            )
+            raise ValueError(f"{source_path}: expected a static image")
         oriented = ImageOps.exif_transpose(opened)
         rgba = oriented.convert("RGBA")
-        flattened = Image.new("RGB", rgba.size, background_rgb)
-        flattened.paste(rgba, mask=rgba.getchannel("A"))
+        return _prepare_monochrome_frame(
+            rgba, size, fit, background_rgb, threshold, dither, invert, Image, ImageOps
+        )
+
+
+def _prepare_monochrome_frame(
+    rgba,
+    size: tuple[int, int],
+    fit: str,
+    background_rgb: tuple[int, int, int],
+    threshold: int,
+    dither: str,
+    invert: bool,
+    Image,
+    ImageOps,
+):
+    flattened = Image.new("RGB", rgba.size, background_rgb)
+    flattened.paste(rgba, mask=rgba.getchannel("A"))
 
     if fit == "contain":
         resized = ImageOps.contain(flattened, size, method=Image.Resampling.LANCZOS)
@@ -389,6 +439,79 @@ def _prepare_monochrome_image(
     if dither == "floyd-steinberg":
         return grayscale.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
     return grayscale.point(lambda pixel: 255 if pixel >= threshold else 0, mode="1")
+
+
+def _prepare_animation_frames(
+    source_path: Path,
+    size: tuple[int, int],
+    fit: str,
+    background: str,
+    threshold: int,
+    dither: str,
+    invert: bool,
+    fps: int,
+    max_frames: int,
+    start_time: int,
+    duration: int | None,
+):
+    Image, ImageOps = _require_pillow()
+    background_value = 0 if background == "black" else 255
+    background_rgb = (background_value,) * 3
+
+    composited = []
+    durations = []
+    with Image.open(source_path) as opened:
+        for index in range(opened.n_frames):
+            opened.seek(index)
+            composited.append(opened.convert("RGBA").copy())
+            durations.append(max(20, int(opened.info.get("duration", 100) or 100)))
+
+    source_duration = sum(durations)
+    if start_time >= source_duration:
+        raise ValueError(
+            f"--start-time must be less than the GIF duration ({source_duration} ms)"
+        )
+    selected_duration = duration if duration is not None else source_duration - start_time
+    if start_time + selected_duration > source_duration:
+        raise ValueError(
+            f"selected time range ends after the GIF duration ({source_duration} ms)"
+        )
+
+    requested_count = max(1, math.ceil(selected_duration * fps / 1000))
+    output_count = min(requested_count, max_frames)
+    was_capped = requested_count > max_frames
+    if was_capped:
+        sample_times = [
+            start_time + index * selected_duration / output_count
+            for index in range(output_count)
+        ]
+        output_duration = selected_duration
+    else:
+        frame_interval = 1000 / fps
+        sample_times = [start_time + index * frame_interval for index in range(output_count)]
+        output_duration = round(output_count * frame_interval)
+
+    selected = []
+    source_index = 0
+    source_end = durations[0]
+    for sample_time in sample_times:
+        while source_index + 1 < len(composited) and sample_time >= source_end:
+            source_index += 1
+            source_end += durations[source_index]
+        selected.append(
+            _prepare_monochrome_frame(
+                composited[source_index],
+                size,
+                fit,
+                background_rgb,
+                threshold,
+                dither,
+                invert,
+                Image,
+                ImageOps,
+            )
+        )
+    return selected, output_duration, was_capped
 
 
 def _pack_monochrome_pixels(image) -> bytes:
@@ -440,6 +563,26 @@ const lv_img_dsc_t {asset.name} = {{
 """
 
 
+def _format_animation_c(assets: list[ImageAsset], name: str, duration_ms: int) -> str:
+    declarations = []
+    frame_names = []
+    for asset in assets:
+        frame_text = _format_c_asset(asset)
+        declarations.append(frame_text.split("\n", 1)[1].rstrip())
+        frame_names.append(f"    &{asset.name},")
+
+    return f"""#include <lvgl.h>
+
+{chr(10).join(declarations)}
+
+const lv_img_dsc_t *const {name}_frames[] = {{
+{chr(10).join(frame_names)}
+}};
+const uint8_t {name}_frame_count = {len(assets)};
+const uint32_t {name}_duration_ms = {duration_ms};
+"""
+
+
 def convert_images(
     inputs: list[Path],
     output_dir: Path,
@@ -452,6 +595,10 @@ def convert_images(
     name: str | None,
     preview: bool,
     force: bool,
+    fps: int,
+    max_frames: int,
+    start_time: int,
+    duration: int | None,
 ) -> list[ConvertedAsset]:
     sources = discover_image_files(inputs, excluded_dir=output_dir)
     if name and len(sources) != 1:
@@ -466,42 +613,102 @@ def convert_images(
         names.add(image_name)
 
         c_path = output_dir / f"{image_name}.c"
-        preview_path = output_dir / f"{image_name}.preview.png" if preview else None
+        is_animated = False
+        if source_path.suffix.lower() == ".gif":
+            Image, _ = _require_pillow()
+            with Image.open(source_path) as opened:
+                is_animated = getattr(opened, "n_frames", 1) > 1
+        preview_suffix = ".preview.gif" if is_animated else ".preview.png"
+        preview_path = output_dir / f"{image_name}{preview_suffix}" if preview else None
         targets = [c_path] + ([preview_path] if preview_path else [])
         existing = [path for path in targets if path.exists()]
         if existing and not force:
             raise ValueError(
                 f"refusing to overwrite {existing[0]}; pass --force to replace generated files"
             )
-        jobs.append((source_path, image_name, c_path, preview_path))
+        jobs.append((source_path, image_name, c_path, preview_path, is_animated))
 
     converted = []
-    for source_path, image_name, c_path, preview_path in jobs:
-        image = _prepare_monochrome_image(
-            source_path, size, fit, background, threshold, dither, invert
+    for source_path, image_name, c_path, preview_path, is_animated in jobs:
+        duration_ms = None
+        was_capped = False
+        if is_animated:
+            if fps > 10:
+                print(
+                    f"warning: {source_path} requests {fps} FPS, above the "
+                    "10 FPS keyboard validation range",
+                    file=sys.stderr,
+                )
+            images, duration_ms, was_capped = _prepare_animation_frames(
+                source_path,
+                size,
+                fit,
+                background,
+                threshold,
+                dither,
+                invert,
+                fps,
+                max_frames,
+                start_time,
+                duration,
+            )
+        else:
+            images = [
+                _prepare_monochrome_image(
+                    source_path, size, fit, background, threshold, dither, invert
+                )
+            ]
+
+        assets = [
+            ImageAsset(
+                name=(f"{image_name}_frame_{index:03d}" if is_animated else image_name),
+                width=size[0],
+                height=size[1],
+                palette=((0, 0, 0, 255), (255, 255, 255, 255)),
+                pixels=_pack_monochrome_pixels(image),
+                declared_size=8 + ((size[0] + 7) // 8) * size[1],
+            )
+            for index, image in enumerate(images)
+        ]
+        c_text = (
+            _format_animation_c(assets, image_name, duration_ms)
+            if is_animated
+            else _format_c_asset(assets[0])
         )
-        asset = ImageAsset(
-            name=image_name,
-            width=size[0],
-            height=size[1],
-            palette=((0, 0, 0, 255), (255, 255, 255, 255)),
-            pixels=_pack_monochrome_pixels(image),
-            declared_size=8 + ((size[0] + 7) // 8) * size[1],
-        )
-        c_text = _format_c_asset(asset)
 
         # Parse our emitted C before writing it. This keeps conversion and extraction
         # compatible. The preview uses those packed bytes with the physical panel's
         # reversed monochrome polarity.
         parsed = parse_assets(c_text)
-        if len(parsed) != 1:
+        if len(parsed) != len(assets):
             raise ValueError(f"{image_name}: generated C did not round-trip through the extractor")
 
         output_dir.mkdir(parents=True, exist_ok=True)
         c_path.write_text(c_text, encoding="utf-8")
         if preview_path:
-            write_physical_preview_png(parsed[0], preview_path)
-        converted.append(ConvertedAsset(parsed[0], source_path, c_path, preview_path))
+            if is_animated:
+                write_physical_preview_gif(parsed, preview_path, duration_ms)
+            else:
+                write_physical_preview_png(parsed[0], preview_path)
+        total_data_size = sum(asset.declared_size or 0 for asset in parsed)
+        if was_capped:
+            effective_fps = len(parsed) * 1000 / duration_ms
+            print(
+                f"warning: {source_path} was limited to {max_frames} frames; "
+                f"the full cycle duration was preserved at an effective {effective_fps:.2f} FPS",
+                file=sys.stderr,
+            )
+        converted.append(
+            ConvertedAsset(
+                parsed[0],
+                source_path,
+                c_path,
+                preview_path,
+                len(parsed),
+                duration_ms,
+                total_data_size,
+            )
+        )
     return converted
 
 
@@ -539,6 +746,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dither", choices=("none", "floyd-steinberg"), default="none"
     )
     convert.add_argument("--invert", action="store_true", help="invert black and white")
+    convert.add_argument("--fps", type=int, default=5, help="animated GIF sample rate (1-30, default: 5)")
+    convert.add_argument(
+        "--max-frames", type=int, default=16, help="maximum emitted animation frames (1-127, default: 16)"
+    )
+    convert.add_argument(
+        "--start-time", type=int, default=0, metavar="MS", help="start animated GIF conversion at this time"
+    )
+    convert.add_argument(
+        "--duration", type=int, metavar="MS", help="convert only this many milliseconds of an animated GIF"
+    )
     convert.add_argument(
         "--name", type=_validate_c_identifier, help="C image name (single image only)"
     )
@@ -559,6 +776,14 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if not 0 <= args.threshold <= 255:
                 raise ValueError("--threshold must be between 0 and 255")
+            if not 1 <= args.fps <= 30:
+                raise ValueError("--fps must be between 1 and 30")
+            if not 1 <= args.max_frames <= 127:
+                raise ValueError("--max-frames must be between 1 and 127")
+            if args.start_time < 0:
+                raise ValueError("--start-time must not be negative")
+            if args.duration is not None and args.duration < 1:
+                raise ValueError("--duration must be at least 1 ms")
             converted = convert_images(
                 args.source,
                 args.output,
@@ -571,6 +796,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.name,
                 args.preview,
                 args.force,
+                args.fps,
+                args.max_frames,
+                args.start_time,
+                args.duration,
             )
     except (OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
@@ -583,11 +812,10 @@ def main(argv: list[str] | None = None) -> int:
             print(args.output / "index.html")
     else:
         for item in converted:
-            data_size = item.asset.declared_size
-            print(
-                f"{item.c_path} "
-                f"({item.asset.width}x{item.asset.height}, {data_size} data bytes)"
-            )
+            details = f"{item.asset.width}x{item.asset.height}, {item.total_data_size} data bytes"
+            if item.frame_count > 1:
+                details += f", {item.frame_count} frames, {item.duration_ms} ms cycle"
+            print(f"{item.c_path} ({details})")
             if item.preview_path:
                 print(item.preview_path)
     return 0

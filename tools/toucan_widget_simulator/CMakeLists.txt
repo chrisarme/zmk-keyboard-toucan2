@@ -38,6 +38,7 @@ add_executable(
   ${TOUCAN_WIDGET_DIR}/util.c
   ${TOUCAN_ASSET_DIR}/images.c
   ${TOUCAN_ASSET_DIR}/naotoframe1.c
+  ${TOUCAN_ASSET_DIR}/fps_validation.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c
@@ -75,6 +76,7 @@ if(BUILD_TESTING)
   add_executable(
     screen_selection_test
     tests/test_screen_selection.c
+    ../../src/animation.c
     ../../src/screen_selection.c
   )
   target_include_directories(
