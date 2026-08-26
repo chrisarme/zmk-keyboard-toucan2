@@ -33,11 +33,11 @@ int main(void) {
   assert(toucan_screen_restore(0, NULL) == -EINVAL);
 
   assert(toucan_animation_fps(TOUCAN_SCREEN_2) == 0);
-  assert(toucan_animation_fps(TOUCAN_SCREEN_3) == 8);
-  assert(toucan_animation_interval_ms(TOUCAN_SCREEN_3) == 125);
-  assert(toucan_animation_next_frame(0, 14) == 1);
-  assert(toucan_animation_next_frame(13, 14) == 0);
-  assert(toucan_animation_next_frame(13, 0) == 0);
+  assert(toucan_animation_fps(TOUCAN_SCREEN_3) == 5);
+  assert(toucan_animation_interval_ms(TOUCAN_SCREEN_3) == 200);
+  assert(toucan_animation_next_frame(0, 9) == 1);
+  assert(toucan_animation_next_frame(8, 9) == 0);
+  assert(toucan_animation_next_frame(8, 0) == 0);
 
   return 0;
 }

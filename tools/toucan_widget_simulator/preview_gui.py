@@ -402,10 +402,10 @@ class PreviewApp:
             self.preview_image = source.zoom(3, 3)
             self.canvas.delete("all")
             self.canvas.create_image(216, 252, image=self.preview_image)
-            animation_fps = 8 if self.screen.get() == 3 else None
+            animation_fps = 5 if self.screen.get() == 3 else None
             if animation_fps:
                 self.status.set(f"ANIMATION // {animation_fps} FPS")
-                self.animation_frame = (self.animation_frame + 1) % 14
+                self.animation_frame = (self.animation_frame + 1) % 9
                 self.pending_render = self.root.after(
                     round(1000 / animation_fps), self.render_preview
                 )

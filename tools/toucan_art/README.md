@@ -183,8 +183,8 @@ py -3 -m unittest discover -s tools/toucan_art/tests -v
 Five FPS and 16 frames are conservative starting defaults for a wireless keyboard. The
 converter warns above 10 FPS because higher rates should be justified with physical input,
 sleep, and power testing. Physical testing found 2, 5, and 10 FPS visually clean and
-responsive. The selected `naotogif.gif` artwork uses 8 FPS and 14 frames as a compromise
-between smooth motion, update activity, and flash size.
+responsive, but the selected `naotogif.gif` artwork uses the conservative 5 FPS default
+and nine frames after occasional uneven playback was observed at 8 FPS on hardware.
 
 The Sharp panel supports continuous serial frame timing near 60 Hz, but that is an
 electrical ceiling rather than a battery recommendation. Its datasheet characterizes power
