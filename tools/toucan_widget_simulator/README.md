@@ -58,7 +58,7 @@ Build products and generated previews are ignored by Git.
 
 | Option | Accepted values | Default | Effect |
 | --- | --- | --- | --- |
-| `--screen` | 0–3 | 2 | Layout: standard, Toucan logo, arcs/WPM, or image-only Naoto art |
+| `--screen` | 0–3 | 2 | Layout: standard, Toucan logo, arcs/WPM, or Naoto art with a status footer |
 | `--left-battery` | 0–100 | 75 | Left-half battery percentage |
 | `--right-battery` | 0–100 | 50 | Right-half battery percentage |
 | `--wpm` | 0–255 | 0 | Adds the newest sample to the WPM chart |
@@ -71,7 +71,7 @@ Build products and generated previews are ignored by Git.
 | `--right-charging` | Flag | Off | Sets the real right charging state |
 | `--output` | BMP filename | Required | Output file to create |
 
-The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 intentionally ignores all injected status values and displays only `naotoframe1`.
+The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays `naotoframe1` in the upper 144×144 area, with a compact footer showing live left/right battery percentages and the active Bluetooth profile. Its artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter now preserves that visible source polarity by default.
 
 ## Test
 

@@ -50,10 +50,13 @@ def main():
     encoded = [tuple(pixel for row in frame for pixel in row) for frame in frames]
     if len(set(encoded)) != 4:
         raise AssertionError("screens 0, 1, 2, and 3 should render four distinct frames")
+    artwork_pixels = [pixel for row in frames[3][:144] for pixel in row]
+    if (0, 0, 0) not in artwork_pixels or (255, 255, 255) not in artwork_pixels:
+        raise AssertionError("screen 3 artwork should contain both dark and light pixels")
     if frames[3][0][0] != (255, 255, 255):
-        raise AssertionError("screen 3 logical black background should preview as unfilled white")
-    if not any(pixel == (0, 0, 0) for row in frames[3] for pixel in row):
-        raise AssertionError("screen 3 logical white artwork should preview as dark ink")
+        raise AssertionError("screen 3 artwork should use the standard light background")
+    if frames[3][145][44] != (255, 255, 255):
+        raise AssertionError("screen 3 footer should use the standard light background")
 
     alternate_image_frame = render(
         executable,
@@ -72,8 +75,29 @@ def main():
             "usb",
         ],
     )
-    if alternate_image_frame != frames[3]:
-        raise AssertionError("screen 3 should render only the image, independent of status state")
+    if alternate_image_frame[:144] != frames[3][:144]:
+        raise AssertionError("screen 3 artwork should not change with status state")
+    if alternate_image_frame[144:] == frames[3][144:]:
+        raise AssertionError("screen 3 footer should update with battery and profile state")
+
+    footer_regions = {
+        "left battery": (0, 40),
+        "Bluetooth profiles": (48, 96),
+        "right battery": (104, 144),
+    }
+    for name, (start_x, end_x) in footer_regions.items():
+        dark_pixels = sum(
+            pixel == (0, 0, 0)
+            for row in frames[3][144:]
+            for pixel in row[start_x:end_x]
+        )
+        light_pixels = sum(
+            pixel == (255, 255, 255)
+            for row in frames[3][144:]
+            for pixel in row[start_x:end_x]
+        )
+        if dark_pixels == 0 or light_pixels == 0:
+            raise AssertionError(f"screen 3 footer should visibly render {name}")
 
 
 if __name__ == "__main__":

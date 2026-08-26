@@ -398,9 +398,10 @@ def _pack_monochrome_pixels(image) -> bytes:
     packed = bytearray(stride * height)
     for y in range(height):
         for x in range(width):
-            # Pack source white as logical white (index 1). The physical panel
-            # reverses that polarity, so the converted artwork appears inverted.
-            if pixels[x, y]:
+            # The panel reverses LVGL's logical monochrome polarity. Pack source
+            # black as logical white so converted artwork keeps its visible
+            # black/white appearance on the physical display and in previews.
+            if not pixels[x, y]:
                 packed[y * stride + x // 8] |= 1 << (7 - (x % 8))
     return bytes(packed)
 

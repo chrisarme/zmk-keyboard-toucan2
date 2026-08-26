@@ -325,7 +325,7 @@ class ConvertCommandTests(unittest.TestCase):
             c_text = c_path.read_text(encoding="utf-8")
             self.assertIn("LV_IMG_CF_INDEXED_1BIT", c_text)
             self.assertIn(".data_size = 10", c_text)
-            self.assertIn("0x40, 0x80", c_text)
+            self.assertIn("0x80, 0x40", c_text)
             self.assertIn("10 data bytes", result.stdout)
 
             extract_result = subprocess.run(
@@ -347,8 +347,8 @@ class ConvertCommandTests(unittest.TestCase):
             )
             black = (0, 0, 0)
             white = (255, 255, 255)
-            self.assertEqual(preview_rows, [[white, black], [black, white]])
-            self.assertEqual(logical_rows, [[black, white], [white, black]])
+            self.assertEqual(preview_rows, [[black, white], [white, black]])
+            self.assertEqual(logical_rows, [[white, black], [black, white]])
 
     def test_contain_preserves_aspect_ratio_and_uses_background(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -379,9 +379,9 @@ class ConvertCommandTests(unittest.TestCase):
             black = (0, 0, 0)
             white = (255, 255, 255)
             self.assertEqual((width, height), (4, 4))
-            self.assertEqual(rows, [[black] * 4, [white] * 4, [white] * 4, [black] * 4])
+            self.assertEqual(rows, [[white] * 4, [black] * 4, [black] * 4, [white] * 4])
 
-    def test_output_polarity_is_inverted_with_black_white_and_transparent_background(self):
+    def test_output_preserves_black_white_and_transparent_background(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             source_path = temp / "transparent.png"
@@ -411,14 +411,44 @@ class ConvertCommandTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             c_text = (output_dir / "transparent.c").read_text(encoding="utf-8")
-            self.assertIn("0x60,", c_text)
+            self.assertIn("0x80,", c_text)
             _, _, _, _, rows = read_indexed_png(
                 output_dir / "transparent.preview.png"
             )
             self.assertEqual(
                 rows,
-                [[(255, 255, 255), (0, 0, 0), (0, 0, 0)]],
+                [[(0, 0, 0), (255, 255, 255), (255, 255, 255)]],
             )
+
+    def test_invert_option_intentionally_reverses_visible_output(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "art.png"
+            output_dir = temp / "generated"
+            write_rgb_png(source_path, [[(0, 0, 0), (255, 255, 255)]])
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "convert",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--size",
+                    "2x1",
+                    "--fit",
+                    "stretch",
+                    "--invert",
+                    "--preview",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            _, _, _, _, rows = read_indexed_png(output_dir / "art.preview.png")
+            self.assertEqual(rows, [[(255, 255, 255), (0, 0, 0)]])
 
     def test_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as temp_dir:
