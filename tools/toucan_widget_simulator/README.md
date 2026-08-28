@@ -31,7 +31,7 @@ Build the renderer once, then launch the desktop control panel:
 python tools/toucan_widget_simulator/preview_gui.py
 ```
 
-The window magnifies the physical 144×168 display to 432×504. Screen style, artwork, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. On Screen 3, Artwork 0 previews `naotogif_8fps` and Artwork 1 previews `darkSoulsBonfire8fps`; both animate at 8 FPS. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
+The window magnifies the physical 144×168 display to 432×504. Screen style, artwork, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. Artwork choices, frame counts, and timing are loaded from `config/toucan_artworks.json`, so newly installed entries appear after restarting the GUI. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
 
 **Layer #** is the zero-based layer number used internally by ZMK. When **Name** is filled in, that name is displayed and the number has no visible effect. When **Name** is blank, the screen uses the number as a fallback label such as `L#2`.
 
@@ -59,7 +59,7 @@ Build products and generated previews are ignored by Git.
 | Option | Accepted values | Default | Effect |
 | --- | --- | --- | --- |
 | `--screen` | 0–3 | 2 | Screens 0–2 are status layouts; Screen 3 is the 8 FPS artwork layout |
-| `--artwork` | 0–1 | 0 | Selects `naotogif_8fps` (0) or `darkSoulsBonfire8fps` (1) on Screen 3 |
+| `--artwork` | Registered index | 0 | Selects an entry from `config/toucan_artworks.json` on Screen 3 |
 | `--animation-frame` | 0–127 | 0 | Generated animation frame to render for a one-shot BMP |
 | `--left-battery` | 0–100 | 75 | Left-half battery percentage |
 | `--right-battery` | 0–100 | 50 | Right-half battery percentage |

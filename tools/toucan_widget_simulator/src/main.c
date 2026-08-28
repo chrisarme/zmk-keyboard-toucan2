@@ -8,6 +8,7 @@
 #include <zmk/keymap.h>
 
 #include "screen_layout.h"
+#include "artwork_registry.h"
 #include "util.h"
 
 static lv_disp_draw_buf_t display_draw_buffer;
@@ -128,7 +129,7 @@ static int write_canvas_bmp(lv_obj_t *canvas, const char *output_path) {
 static void print_usage(const char *program) {
     fprintf(stderr,
             "Usage: %s [--left-battery 0..100] [--right-battery 0..100] "
-            "[--screen 0..3] [--artwork 0..1] [--animation-frame 0..127] "
+            "[--screen 0..3] [--artwork INDEX] [--animation-frame 0..127] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
             "[--left-charging] [--right-charging] --output preview.bmp\n",
@@ -158,7 +159,8 @@ int main(int argc, char **argv) {
             options.screen = parse_bounded_integer(argv[++index], "--screen", 3);
             if (options.screen < 0) return 2;
         } else if (strcmp(argv[index], "--artwork") == 0 && index + 1 < argc) {
-            options.artwork = parse_bounded_integer(argv[++index], "--artwork", 1);
+            options.artwork = parse_bounded_integer(
+                argv[++index], "--artwork", toucan_artwork_count() - 1);
             if (options.artwork < 0) return 2;
         } else if (strcmp(argv[index], "--animation-frame") == 0 && index + 1 < argc) {
             options.animation_frame =

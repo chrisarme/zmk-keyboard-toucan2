@@ -121,36 +121,59 @@ A full-screen 144×168 image therefore uses 3,032 data bytes in firmware. A 144�
 uses 2,600 bytes, so an eight-frame animation uses 20,800 image-data bytes plus small
 descriptor metadata. The command reports total image data, frame count, and cycle duration.
 
-Generated output is staged under `tools/toucan_art/generated` by convention and is not added
-to the firmware build automatically. After reviewing the preview, copy or move the chosen C
-file into the shield's `assets` directory, add it to
-`boards/shields/nice_view_gem/CMakeLists.txt`, and declare it where it is used:
+Generated output from `convert` is staged under `tools/toucan_art/generated` and is not added
+to the firmware automatically. Use `install` when an image is ready to become selectable on
+Screen 3:
 
-```c
-LV_IMG_DECLARE(artwork);
+```powershell
+py -3 tools/toucan_art/toucan_art.py install cool-animation.gif `
+    --name cool_animation `
+    --fps 8
 ```
 
-Keeping integration manual prevents an exploratory conversion from silently increasing the
-controller firmware.
+`install` uses the Screen 3 defaults—142×142, contain fit, white/light background, position
+`(1, 2)`, and at most 16 frames. It creates a round-tripped preview under `generated`, copies
+the compiled C asset into the shield, appends `config/toucan_artworks.json`, and regenerates
+all firmware and simulator integration files. Static PNG, JPEG, BMP, WebP, and GIF inputs use
+the same command and automatically receive a zero animation interval.
 
-### Add artwork to the Screen 3 registry
+Names must be unique C identifiers such as `cool_animation`. Re-running an installed name is
+rejected unless `--force` is supplied; with `--force`, the entry is replaced at the same index.
 
-Screen 3 can cycle among assets compiled into a small flash-resident registry. To add one:
+List installed artwork and its exact image-data cost:
 
-1. Copy the reviewed generated C file to `boards/shields/nice_view_gem/assets`.
-2. Add that file to `boards/shields/nice_view_gem/CMakeLists.txt`.
-3. Declare its generated `*_frames` and `*_frame_count` symbols in
-   `widgets/artwork_registry.c`, then add one registry entry with its frame interval and
-   draw coordinates.
-4. Increment `TOUCAN_ARTWORK_COUNT` in
-   `include/dt-bindings/zmk/toucan_artwork.h` and add a direct-selection constant if one is
-   useful.
-5. Rebuild the simulator and firmware. In the simulator, use `--screen 3 --artwork INDEX`
-   or select the index in the GUI.
+```powershell
+py -3 tools/toucan_art/toucan_art.py list
+```
+
+Remove an entry and its compiled firmware asset:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py remove cool_animation
+```
+
+The ignored generated C file and preview remain available for recovery. The final registry
+entry cannot be removed because Screen 3 always requires a valid selection.
+
+If generated integration files are missing or stale, recreate them from the manifest:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py sync
+```
+
+The following are generated and marked “Do not edit manually”:
+
+- `config/toucan_artworks.cmake`
+- `include/dt-bindings/zmk/toucan_artwork.h`
+- `boards/shields/nice_view_gem/widgets/artwork_registry.c`
+
+Edit the manifest only through the manager when practical, then commit the manifest, compiled
+asset, generated integration files, and any source artwork that should be preserved.
 
 The registry stores pointers and small metadata only; each selected asset draws into the
 existing shared canvas. Image frames are the meaningful flash cost. Static images can use
-the same format with a one-element frame table and a zero-millisecond interval. On the
+the same registry through an automatically generated one-element frame table and a
+zero-millisecond interval. On the
 keyboard, SET+P selects the previous entry and SET+G selects the next entry. The selected
 index is persisted with the same debounced settings mechanism as the selected screen.
 

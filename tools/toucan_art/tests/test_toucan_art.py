@@ -1,4 +1,5 @@
 import binascii
+import json
 import struct
 import subprocess
 import sys
@@ -797,6 +798,309 @@ class ConvertCommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("static conversion requires Pillow", result.stderr)
             self.assertIn("requirements.txt", result.stderr)
+
+
+class ArtworkManagerTests(unittest.TestCase):
+    def test_install_converts_and_registers_a_static_image(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            source = repo / "little ghost.png"
+            write_rgb_png(source, [[(0, 0, 0), (255, 255, 255)]])
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "install",
+                    str(source),
+                    "--name",
+                    "little_ghost",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(
+                (repo / "config" / "toucan_artworks.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["artworks"][0]["name"], "little_ghost")
+            self.assertEqual(manifest["artworks"][0]["frame_count"], 1)
+            self.assertTrue(
+                (
+                    repo
+                    / "boards"
+                    / "shields"
+                    / "nice_view_gem"
+                    / "assets"
+                    / "little_ghost.c"
+                ).is_file()
+            )
+            registry = (
+                repo
+                / "boards"
+                / "shields"
+                / "nice_view_gem"
+                / "widgets"
+                / "artwork_registry.c"
+            ).read_text(encoding="utf-8")
+            self.assertIn("little_ghost_frames", registry)
+            self.assertIn(".interval_ms = 0", registry)
+            self.assertTrue((repo / "config" / "toucan_artworks.cmake").is_file())
+
+    def test_list_reports_indexes_timing_and_flash_cost(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            manifest_path = repo / "config" / "toucan_artworks.json"
+            manifest_path.parent.mkdir(parents=True)
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artworks": [
+                            {
+                                "name": "bonfire",
+                                "file": "bonfire.c",
+                                "symbol": "bonfire",
+                                "animated": True,
+                                "frame_count": 8,
+                                "fps": 8,
+                                "interval_ms": 125,
+                                "x": 1,
+                                "y": 2,
+                                "data_bytes": 20512,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "list",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("0  bonfire", result.stdout)
+            self.assertIn("8 frames", result.stdout)
+            self.assertIn("8 FPS", result.stdout)
+            self.assertIn("20,512 bytes", result.stdout)
+            self.assertIn("Total image data: 20,512 bytes", result.stdout)
+
+    def test_remove_deletes_the_asset_and_regenerates_indexes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            config = repo / "config"
+            assets = repo / "boards" / "shields" / "nice_view_gem" / "assets"
+            config.mkdir(parents=True)
+            assets.mkdir(parents=True)
+            entries = []
+            for name in ("first", "second"):
+                (assets / f"{name}.c").write_text(name, encoding="utf-8")
+                entries.append(
+                    {
+                        "name": name,
+                        "file": f"{name}.c",
+                        "symbol": name,
+                        "animated": False,
+                        "frame_count": 1,
+                        "fps": 0,
+                        "interval_ms": 0,
+                        "x": 1,
+                        "y": 2,
+                        "data_bytes": 2564,
+                    }
+                )
+            (config / "toucan_artworks.json").write_text(
+                json.dumps({"version": 1, "artworks": entries}), encoding="utf-8"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "remove",
+                    "first",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((assets / "first.c").exists())
+            self.assertTrue((assets / "second.c").is_file())
+            manifest = json.loads(
+                (config / "toucan_artworks.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual([item["name"] for item in manifest["artworks"]], ["second"])
+            header = (
+                repo / "include" / "dt-bindings" / "zmk" / "toucan_artwork.h"
+            ).read_text(encoding="utf-8")
+            self.assertIn("#define TOUCAN_ARTWORK_SECOND 0", header)
+            self.assertIn("#define TOUCAN_ARTWORK_COUNT 1", header)
+
+    def test_sync_recreates_integration_files_from_the_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            config = repo / "config"
+            assets = repo / "boards" / "shields" / "nice_view_gem" / "assets"
+            config.mkdir(parents=True)
+            assets.mkdir(parents=True)
+            (assets / "campfire.c").write_text("compiled art", encoding="utf-8")
+            (config / "toucan_artworks.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artworks": [
+                            {
+                                "name": "campfire",
+                                "file": "campfire.c",
+                                "symbol": "campfire",
+                                "animated": True,
+                                "frame_count": 8,
+                                "fps": 8,
+                                "interval_ms": 125,
+                                "x": 1,
+                                "y": 2,
+                                "data_bytes": 20512,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "sync",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("synced 1 artwork", result.stdout)
+            registry = (
+                repo
+                / "boards"
+                / "shields"
+                / "nice_view_gem"
+                / "widgets"
+                / "artwork_registry.c"
+            ).read_text(encoding="utf-8")
+            self.assertIn("campfire_frames", registry)
+
+    def test_install_force_replaces_an_entry_without_changing_its_index(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            source = repo / "art.png"
+            write_rgb_png(source, [[(0, 0, 0)]])
+            command = [
+                sys.executable,
+                str(TOOL),
+                "install",
+                str(source),
+                "--name",
+                "art",
+                "--repo-root",
+                str(repo),
+            ]
+            first = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+
+            write_rgb_png(source, [[(255, 255, 255)]])
+            replaced = subprocess.run(
+                command + ["--force"], capture_output=True, text=True
+            )
+
+            self.assertEqual(replaced.returncode, 0, replaced.stderr)
+            manifest = json.loads(
+                (repo / "config" / "toucan_artworks.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(manifest["artworks"]), 1)
+            self.assertEqual(manifest["artworks"][0]["name"], "art")
+
+    def test_sync_rejects_an_asset_path_outside_the_assets_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            config = repo / "config"
+            assets = repo / "boards" / "shields" / "nice_view_gem" / "assets"
+            config.mkdir(parents=True)
+            assets.mkdir(parents=True)
+            escaped = assets.parent / "escaped.c"
+            escaped.write_text("do not touch", encoding="utf-8")
+            entry = {
+                "name": "escaped",
+                "file": "../escaped.c",
+                "symbol": "escaped",
+                "animated": False,
+                "frame_count": 1,
+                "fps": 0,
+                "interval_ms": 0,
+                "x": 1,
+                "y": 2,
+                "data_bytes": 2564,
+            }
+            (config / "toucan_artworks.json").write_text(
+                json.dumps({"version": 1, "artworks": [entry]}), encoding="utf-8"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "sync",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("plain C filename", result.stderr)
+            self.assertEqual(escaped.read_text(encoding="utf-8"), "do not touch")
+
+    def test_install_rejects_artwork_that_overlaps_the_footer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            source = repo / "oversized.png"
+            write_rgb_png(source, [[(0, 0, 0)]])
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "install",
+                    str(source),
+                    "--name",
+                    "oversized",
+                    "--repo-root",
+                    str(repo),
+                    "--y",
+                    "3",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("144x144 artwork area", result.stderr)
 
 
 if __name__ == "__main__":

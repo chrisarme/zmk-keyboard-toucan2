@@ -38,13 +38,16 @@ add_executable(
   ${TOUCAN_WIDGET_DIR}/screen_layout.c
   ${TOUCAN_WIDGET_DIR}/util.c
   ${TOUCAN_ASSET_DIR}/images.c
-  ${TOUCAN_ASSET_DIR}/naotogif_8fps.c
-  ${TOUCAN_ASSET_DIR}/darkSoulsBonfire8fps.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c
   ${TOUCAN_ASSET_DIR}/quinquefive_24.c
 )
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../config/toucan_artworks.cmake)
+foreach(artwork_asset IN LISTS TOUCAN_ARTWORK_ASSETS)
+  target_sources(toucan_widget_simulator PRIVATE ${TOUCAN_ASSET_DIR}/${artwork_asset})
+endforeach()
 
 target_include_directories(
   toucan_widget_simulator

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import struct
 import subprocess
 import sys
@@ -26,10 +27,22 @@ class PreviewState:
     right_charging: bool = False
 
 
+def load_artwork_specs(path: Path) -> list[dict]:
+    return json.loads(path.read_text(encoding="utf-8"))["artworks"]
+
+
+ARTWORK_SPECS = load_artwork_specs(
+    Path(__file__).resolve().parents[2] / "config" / "toucan_artworks.json"
+)
+
+
 def animation_spec(screen: int, artwork: int) -> tuple[int, int] | None:
     if screen != 3:
         return None
-    return (8, 14 if artwork == 0 else 8)
+    selected = ARTWORK_SPECS[artwork]
+    if not selected["animated"]:
+        return None
+    return (selected["fps"], selected["frame_count"])
 
 
 def build_renderer_command(
@@ -240,7 +253,7 @@ class PreviewApp:
         )
         ttk.Combobox(
             controls,
-            values=(0, 1),
+            values=tuple(range(len(ARTWORK_SPECS))),
             state="readonly",
             width=5,
             textvariable=self.artwork,
