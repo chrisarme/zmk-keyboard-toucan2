@@ -14,16 +14,16 @@
       "data_bytes": 35896
     },
     {
-      "name": "bonfire",
-      "file": "darkSoulsBonfire8fps.c",
-      "symbol": "darkSoulsBonfire8fps",
+      "name": "darkSoulsBonfire",
+      "file": "darkSoulsBonfire.c",
+      "symbol": "darkSoulsBonfire",
       "animated": true,
       "frame_count": 8,
       "fps": 8,
       "interval_ms": 125,
-      "x": 1,
-      "y": 2,
-      "data_bytes": 20512
+      "x": 7,
+      "y": 7,
+      "data_bytes": 17744
     }
   ]
 }

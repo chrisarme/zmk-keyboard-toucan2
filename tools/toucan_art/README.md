@@ -132,10 +132,23 @@ py -3 tools/toucan_art/toucan_art.py install cool-animation.gif `
 ```
 
 `install` uses the Screen 3 defaults—142×142, contain fit, white/light background, position
-`(1, 2)`, and at most 16 frames. It creates a round-tripped preview under `generated`, copies
-the compiled C asset into the shield, appends `config/toucan_artworks.json`, and regenerates
-all firmware and simulator integration files. Static PNG, JPEG, BMP, WebP, and GIF inputs use
-the same command and automatically receive a zero animation interval.
+centered within the 144×144 area above the footer, and at most 16 frames. It creates a
+round-tripped preview under `generated`, copies the compiled C asset into the shield, appends
+`config/toucan_artworks.json`, and regenerates all firmware and simulator integration files.
+Static PNG, JPEG, BMP, WebP, and GIF inputs use the same command and automatically receive a
+zero animation interval.
+
+Choose a smaller or rectangular canvas with `--size WIDTHxHEIGHT`; placement is calculated
+automatically, so no coordinates are needed. For example, `--size 120x100` is placed at
+`(12, 22)`. Use `--x` or `--y` only to override the calculated position on that axis. The
+installer rejects any size or override that leaves the safe area or overlaps the footer:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py install compact-art.gif `
+    --name compact_art `
+    --size 120x100 `
+    --fps 8
+```
 
 Names must be unique C identifiers such as `cool_animation`. Re-running an installed name is
 rejected unless `--force` is supplied; with `--force`, the entry is replaced at the same index.
@@ -228,9 +241,10 @@ Five FPS and 16 frames remain conservative starting defaults for a wireless keyb
 converter warns above 10 FPS because higher rates should be justified with physical input,
 sleep, and power testing. Physical testing found 2, 5, and 10 FPS visually clean and
 responsive. The two current registry entries intentionally use 8 FPS for comparison:
-`naotogif_8fps` has 14 frames and `darkSoulsBonfire8fps` has eight. Because an earlier
-Naoto trial occasionally appeared uneven at 8 FPS, both should be revalidated for smoothness
-and responsiveness on hardware before merging.
+`naotogif_8fps` has 14 142×142 frames and `darkSoulsBonfire` has eight 130×130 frames. The
+manager automatically centers the latter at `(7, 7)`. Because an earlier Naoto trial
+occasionally appeared uneven at 8 FPS, both should be revalidated for smoothness and
+responsiveness on hardware before merging.
 
 The Sharp panel supports continuous serial frame timing near 60 Hz, but that is an
 electrical ceiling rather than a battery recommendation. Its datasheet characterizes power

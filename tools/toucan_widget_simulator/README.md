@@ -73,7 +73,7 @@ Build products and generated previews are ignored by Git.
 | `--right-charging` | Flag | Off | Sets the real right charging state |
 | `--output` | BMP filename | Required | Output file to create |
 
-The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays the selected 142×142 animation at `(1, 2)`, leaving the lower 24 pixels for live left/right battery percentages and the active Bluetooth profile. `naotogif_8fps` has 14 frames and `darkSoulsBonfire8fps` has eight. Their artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter preserves that visible source polarity by default.
+The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays the selected animation inside the upper 144×144 artwork area, leaving the lower 24 pixels for live left/right battery percentages and the active Bluetooth profile. `naotogif_8fps` has 14 142×142 frames at `(1, 2)` and `darkSoulsBonfire` has eight 130×130 frames centered at `(7, 7)`. Their artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter preserves that visible source polarity by default.
 
 ## Test
 

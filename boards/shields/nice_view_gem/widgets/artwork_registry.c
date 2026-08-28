@@ -7,8 +7,8 @@
 
 extern const lv_img_dsc_t *const naotogif_8fps_frames[];
 extern const uint8_t naotogif_8fps_frame_count;
-extern const lv_img_dsc_t *const darkSoulsBonfire8fps_frames[];
-extern const uint8_t darkSoulsBonfire8fps_frame_count;
+extern const lv_img_dsc_t *const darkSoulsBonfire_frames[];
+extern const uint8_t darkSoulsBonfire_frame_count;
 
 static const struct toucan_artwork artwork_registry[] = {
     {
@@ -19,11 +19,11 @@ static const struct toucan_artwork artwork_registry[] = {
         .y = 2,
     },
     {
-        .frames = darkSoulsBonfire8fps_frames,
-        .frame_count = &darkSoulsBonfire8fps_frame_count,
+        .frames = darkSoulsBonfire_frames,
+        .frame_count = &darkSoulsBonfire_frame_count,
         .interval_ms = 125,
-        .x = 1,
-        .y = 2,
+        .x = 7,
+        .y = 7,
     },
 };
 

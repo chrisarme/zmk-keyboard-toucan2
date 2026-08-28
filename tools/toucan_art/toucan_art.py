@@ -862,9 +862,11 @@ def _write_artwork_integration(repo_root: Path, manifest: dict) -> None:
 def install_artwork(args) -> dict:
     repo_root = args.repo_root.resolve()
     width, height = args.size
-    if args.x < 0 or args.y < 0 or args.x + width > 144 or args.y + height > 144:
+    x = (144 - width) // 2 if args.x is None else args.x
+    y = (144 - height) // 2 if args.y is None else args.y
+    if x < 0 or y < 0 or x + width > 144 or y + height > 144:
         raise ValueError(
-            f"{width}x{height} at ({args.x}, {args.y}) must fit the 144x144 artwork area"
+            f"{width}x{height} at ({x}, {y}) must fit the 144x144 artwork area"
         )
     manifest = _load_artwork_manifest(repo_root)
     existing_index = next(
@@ -897,8 +899,8 @@ def install_artwork(args) -> dict:
         "frame_count": converted.frame_count,
         "fps": args.fps if animated else 0,
         "interval_ms": round(1000 / args.fps) if animated else 0,
-        "x": args.x,
-        "y": args.y,
+        "x": x,
+        "y": y,
         "data_bytes": converted.total_data_size,
     }
     if existing_index is None:
@@ -1044,8 +1046,12 @@ def _build_parser() -> argparse.ArgumentParser:
     install.add_argument("--invert", action="store_true")
     install.add_argument("--fps", type=int, default=5)
     install.add_argument("--max-frames", type=int, default=16)
-    install.add_argument("--x", type=int, default=1)
-    install.add_argument("--y", type=int, default=2)
+    install.add_argument(
+        "--x", type=int, help="left position; defaults to horizontal safe-area centering"
+    )
+    install.add_argument(
+        "--y", type=int, help="top position; defaults to vertical safe-area centering"
+    )
     install.add_argument("--force", action="store_true")
     list_command = subparsers.add_parser("list", help="list installed artwork")
     list_command.add_argument(
