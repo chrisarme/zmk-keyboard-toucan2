@@ -31,7 +31,7 @@ Build the renderer once, then launch the desktop control panel:
 python tools/toucan_widget_simulator/preview_gui.py
 ```
 
-The window magnifies the physical 144×168 display to 432×504. Screen style, artwork, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. On Screen 3, Artwork 0 previews `naotogif` and Artwork 1 previews `darkSoulsBonfire`; both animate at 5 FPS. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
+The window magnifies the physical 144×168 display to 432×504. Screen style, artwork, battery levels, WPM, layer, Bluetooth profile, endpoint, connection, and charging controls update the preview automatically after a short debounce. On Screen 3, Artwork 0 previews `naotogif_8fps` and Artwork 1 previews `darkSoulsBonfire8fps`; both animate at 8 FPS. The renderer reverses the logical LVGL monochrome polarity at export time to match the physical Memory LCD: logical white becomes dark ink and logical black becomes the unfilled light background.
 
 **Layer #** is the zero-based layer number used internally by ZMK. When **Name** is filled in, that name is displayed and the number has no visible effect. When **Name** is blank, the screen uses the number as a fallback label such as `L#2`.
 
@@ -58,8 +58,8 @@ Build products and generated previews are ignored by Git.
 
 | Option | Accepted values | Default | Effect |
 | --- | --- | --- | --- |
-| `--screen` | 0–3 | 2 | Screens 0–2 are status layouts; Screen 3 is the 5 FPS artwork layout |
-| `--artwork` | 0–1 | 0 | Selects `naotogif` (0) or `darkSoulsBonfire` (1) on Screen 3 |
+| `--screen` | 0–3 | 2 | Screens 0–2 are status layouts; Screen 3 is the 8 FPS artwork layout |
+| `--artwork` | 0–1 | 0 | Selects `naotogif_8fps` (0) or `darkSoulsBonfire8fps` (1) on Screen 3 |
 | `--animation-frame` | 0–127 | 0 | Generated animation frame to render for a one-shot BMP |
 | `--left-battery` | 0–100 | 75 | Left-half battery percentage |
 | `--right-battery` | 0–100 | 50 | Right-half battery percentage |
@@ -73,7 +73,7 @@ Build products and generated previews are ignored by Git.
 | `--right-charging` | Flag | Off | Sets the real right charging state |
 | `--output` | BMP filename | Required | Output file to create |
 
-The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays the selected 142×142 animation at `(1, 2)`, leaving the lower 24 pixels for live left/right battery percentages and the active Bluetooth profile. `naotogif` has nine frames and `darkSoulsBonfire` has five. Their artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter preserves that visible source polarity by default.
+The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays the selected 142×142 animation at `(1, 2)`, leaving the lower 24 pixels for live left/right battery percentages and the active Bluetooth profile. `naotogif_8fps` has 14 frames and `darkSoulsBonfire8fps` has eight. Their artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter preserves that visible source polarity by default.
 
 ## Test
 

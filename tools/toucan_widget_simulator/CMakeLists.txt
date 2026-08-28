@@ -38,8 +38,8 @@ add_executable(
   ${TOUCAN_WIDGET_DIR}/screen_layout.c
   ${TOUCAN_WIDGET_DIR}/util.c
   ${TOUCAN_ASSET_DIR}/images.c
-  ${TOUCAN_ASSET_DIR}/naotogif.c
-  ${TOUCAN_ASSET_DIR}/darkSoulsBonfire.c
+  ${TOUCAN_ASSET_DIR}/naotogif_8fps.c
+  ${TOUCAN_ASSET_DIR}/darkSoulsBonfire8fps.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c

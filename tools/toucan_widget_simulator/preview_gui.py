@@ -26,6 +26,12 @@ class PreviewState:
     right_charging: bool = False
 
 
+def animation_spec(screen: int, artwork: int) -> tuple[int, int] | None:
+    if screen != 3:
+        return None
+    return (8, 14 if artwork == 0 else 8)
+
+
 def build_renderer_command(
     renderer: Path, output: Path, state: PreviewState
 ) -> list[str]:
@@ -419,10 +425,10 @@ class PreviewApp:
             self.preview_image = source.zoom(3, 3)
             self.canvas.delete("all")
             self.canvas.create_image(216, 252, image=self.preview_image)
-            animation_fps = 5 if self.screen.get() == 3 else None
-            if animation_fps:
+            animation = animation_spec(self.screen.get(), self.artwork.get())
+            if animation is not None:
+                animation_fps, frame_count = animation
                 self.status.set(f"ANIMATION // {animation_fps} FPS")
-                frame_count = 9 if self.artwork.get() == 0 else 5
                 self.animation_frame = (self.animation_frame + 1) % frame_count
                 self.pending_render = self.root.after(
                     round(1000 / animation_fps), self.render_preview

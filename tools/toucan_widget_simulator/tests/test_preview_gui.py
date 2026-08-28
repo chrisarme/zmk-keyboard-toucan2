@@ -4,10 +4,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from preview_gui import PreviewState, build_renderer_command
+from preview_gui import PreviewState, animation_spec, build_renderer_command
 
 
 class RendererCommandTests(unittest.TestCase):
+    def test_uses_the_registered_8_fps_animation_metadata(self):
+        self.assertEqual(animation_spec(3, 0), (8, 14))
+        self.assertEqual(animation_spec(3, 1), (8, 8))
+        self.assertIsNone(animation_spec(2, 0))
+
     def test_maps_the_complete_gui_state_to_renderer_options(self):
         state = PreviewState(
             screen=1,

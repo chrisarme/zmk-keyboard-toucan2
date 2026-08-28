@@ -35,9 +35,9 @@ int main(void) {
   assert(toucan_screen_restore(0, NULL) == -EINVAL);
 
   assert(toucan_animation_interval_ms(TOUCAN_SCREEN_2, 200) == 0);
-  assert(toucan_animation_interval_ms(TOUCAN_SCREEN_3, 200) == 200);
-  assert(toucan_animation_next_frame(0, 9) == 1);
-  assert(toucan_animation_next_frame(8, 9) == 0);
+  assert(toucan_animation_interval_ms(TOUCAN_SCREEN_3, 125) == 125);
+  assert(toucan_animation_next_frame(0, 14) == 1);
+  assert(toucan_animation_next_frame(13, 14) == 0);
   assert(toucan_animation_next_frame(8, 0) == 0);
 
   selected = 99;
