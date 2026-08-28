@@ -159,44 +159,5 @@ def main():
     if bonfire_frame[144:] != frames[3][144:]:
         raise AssertionError("artwork selection should not change the status footer")
 
-    right_charging_frame = render(
-        executable,
-        output_dir / "screen-3-right-charging.bmp",
-        3,
-        ["--right-charging"],
-    )
-    if right_charging_frame[:144] != frames[3][:144]:
-        raise AssertionError("right charging should not change screen 3 artwork")
-    for row_before, row_after in zip(frames[3][151:161], right_charging_frame[151:161]):
-        if row_before[109:] != row_after[109:]:
-            raise AssertionError("right charging should not move the right battery label")
-    for row_before, row_after in zip(frames[3][149:160], right_charging_frame[149:160]):
-        if row_before[96:99] != row_after[96:99] or row_before[106:109] != row_after[106:109]:
-            raise AssertionError("right charging bolt should keep three-pixel side gaps")
-    if all(
-        row_before[99:106] == row_after[99:106]
-        for row_before, row_after in zip(frames[3][149:160], right_charging_frame[149:160])
-    ):
-        raise AssertionError("right charging should draw its bolt in the fixed footer gap")
-    for row_before, row_after in zip(frames[3][144:], right_charging_frame[144:]):
-        if row_before[:96] != row_after[:96]:
-            raise AssertionError("right charging should not change left battery or profiles")
-
-    for screen in range(3):
-        right_charging_screen = render(
-            executable,
-            output_dir / f"screen-{screen}-right-charging.bmp",
-            screen,
-            ["--right-charging"],
-        )
-        if right_charging_screen == frames[screen]:
-            raise AssertionError(f"right charging should be visible on screen {screen}")
-        for row_before, row_after in zip(frames[screen], right_charging_screen):
-            if row_before[:64] != row_after[:64]:
-                raise AssertionError(
-                    f"right charging should not change the left battery on screen {screen}"
-                )
-
-
 if __name__ == "__main__":
     main()

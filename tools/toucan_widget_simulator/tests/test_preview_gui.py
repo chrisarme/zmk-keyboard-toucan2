@@ -9,10 +9,10 @@ from preview_gui import PreviewState, animation_spec, build_renderer_command
 
 
 class RendererCommandTests(unittest.TestCase):
-    def test_exposes_both_charging_states_for_visual_layout_testing(self):
+    def test_exposes_only_the_supported_left_charging_state(self):
         state_fields = {field.name for field in fields(PreviewState)}
         self.assertIn("left_charging", state_fields)
-        self.assertIn("right_charging", state_fields)
+        self.assertNotIn("right_charging", state_fields)
 
     def test_uses_the_registered_8_fps_animation_metadata(self):
         self.assertEqual(animation_spec(3, 0), (8, 14))
@@ -33,7 +33,6 @@ class RendererCommandTests(unittest.TestCase):
             endpoint="ble",
             connected=True,
             left_charging=True,
-            right_charging=True,
         )
 
         command = build_renderer_command(Path("renderer.exe"), Path("preview.bmp"), state)
@@ -64,7 +63,6 @@ class RendererCommandTests(unittest.TestCase):
                 "ble",
                 "--connected",
                 "--left-charging",
-                "--right-charging",
                 "--output",
                 "preview.bmp",
             ],

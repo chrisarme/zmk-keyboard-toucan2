@@ -24,7 +24,6 @@ class PreviewState:
     endpoint: str = "ble"
     connected: bool = True
     left_charging: bool = False
-    right_charging: bool = False
 
 
 def load_artwork_specs(path: Path) -> list[dict]:
@@ -79,8 +78,6 @@ def build_renderer_command(
         command.append("--connected")
     if state.left_charging:
         command.append("--left-charging")
-    if state.right_charging:
-        command.append("--right-charging")
     command.extend(["--output", str(output)])
     return command
 
@@ -141,7 +138,6 @@ class PreviewApp:
         self.endpoint = tk.StringVar(value="ble")
         self.connected = tk.BooleanVar(value=True)
         self.left_charging = tk.BooleanVar(value=False)
-        self.right_charging = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="READY")
 
         self._configure_window()
@@ -266,10 +262,7 @@ class PreviewApp:
         self._add_scale(controls, 4, "RIGHT", self.right_battery, 100)
         ttk.Checkbutton(
             controls, text="L CHG", variable=self.left_charging
-        ).grid(row=5, column=0, sticky="w", pady=(2, 12))
-        ttk.Checkbutton(
-            controls, text="R CHG (PREVIEW)", variable=self.right_charging
-        ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(2, 12))
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(2, 12))
 
         ttk.Label(controls, text="ACTIVITY", style="Muted.TLabel").grid(
             row=6, column=0, columnspan=3, sticky="w", pady=(0, 6)
@@ -378,7 +371,6 @@ class PreviewApp:
             self.endpoint,
             self.connected,
             self.left_charging,
-            self.right_charging,
         ):
             variable.trace_add("write", lambda *_args: self.schedule_render())
 
@@ -396,7 +388,6 @@ class PreviewApp:
             endpoint=self.endpoint.get(),
             connected=self.connected.get(),
             left_charging=self.left_charging.get(),
-            right_charging=self.right_charging.get(),
         )
 
     def schedule_render(self) -> None:

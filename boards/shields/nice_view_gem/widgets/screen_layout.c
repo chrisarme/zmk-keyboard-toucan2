@@ -88,9 +88,6 @@ static void draw_art_footer(lv_obj_t *canvas,
   if (state->charging) {
     draw_charging_bolt(canvas, 38, 149);
   }
-  if (state->charging_p) {
-    draw_charging_bolt(canvas, 99, 149);
-  }
 }
 
 static void draw_animation_status(lv_obj_t *canvas,
@@ -146,20 +143,6 @@ void draw_toucan_status_layout(lv_obj_t *canvas,
       break;
     case 2:
       draw_charging_bolt(canvas, 44, 31);
-      break;
-    default:
-      break;
-    }
-  }
-
-  if (state->charging_p) {
-    switch (screen) {
-    case 0:
-    case 1:
-      draw_charging_bolt(canvas, 107, 29);
-      break;
-    case 2:
-      draw_charging_bolt(canvas, 116, 31);
       break;
     default:
       break;

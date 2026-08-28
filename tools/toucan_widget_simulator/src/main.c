@@ -28,7 +28,6 @@ struct preview_options {
     enum zmk_transport endpoint;
     bool connected;
     bool left_charging;
-    bool right_charging;
     const char *output_path;
 };
 
@@ -132,7 +131,7 @@ static void print_usage(const char *program) {
             "[--screen 0..3] [--artwork INDEX] [--animation-frame 0..127] "
             "[--wpm 0..255] [--layer 0..255] [--layer-name NAME] "
             "[--profile 0..4] [--endpoint usb|ble|none] [--connected] "
-            "[--left-charging] [--right-charging] --output preview.bmp\n",
+            "[--left-charging] --output preview.bmp\n",
             program);
 }
 
@@ -150,7 +149,6 @@ int main(int argc, char **argv) {
         .endpoint = ZMK_TRANSPORT_BLE,
         .connected = false,
         .left_charging = false,
-        .right_charging = false,
         .output_path = NULL,
     };
 
@@ -203,8 +201,6 @@ int main(int argc, char **argv) {
             options.connected = true;
         } else if (strcmp(argv[index], "--left-charging") == 0) {
             options.left_charging = true;
-        } else if (strcmp(argv[index], "--right-charging") == 0) {
-            options.right_charging = true;
         } else if (strcmp(argv[index], "--output") == 0 && index + 1 < argc) {
             options.output_path = argv[++index];
         } else {
@@ -237,7 +233,6 @@ int main(int argc, char **argv) {
         .battery = (uint8_t)options.left_battery,
         .battery_p = (uint8_t)options.right_battery,
         .charging = options.left_charging,
-        .charging_p = options.right_charging,
         .wpm = (uint8_t)options.wpm,
         .selected_endpoint = {
             .transport = options.endpoint == ZMK_TRANSPORT_BLE && !options.connected
