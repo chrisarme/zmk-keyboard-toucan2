@@ -16,6 +16,22 @@ py -3 -m pip install -r tools/toucan_art/requirements.txt
 Pillow is loaded only by the `convert` command. The existing `extract` command continues to
 work when Pillow is not installed.
 
+## Code layout
+
+The public command remains `toucan_art.py`, which is a thin argument-parsing and reporting
+entry point. Implementation is divided by responsibility:
+
+- `artwork_codec.py` parses LVGL C assets, extracts previews, loads and resizes ordinary
+  images, packs monochrome pixels, and generates deterministic C output. Conversion and
+  extraction intentionally share this module because generated output is round-tripped through
+  the parser before it is accepted.
+- `artwork_registry.py` owns manifest validation, installation and dry-run planning, generated
+  firmware integration, removal and synchronization, and artwork budget calculations.
+
+Keep user-facing command behavior in the entry point and reusable image or registry logic in
+the corresponding module. This lets CI and future tests exercise management policy without
+turning the converter into a second overlapping command-line tool.
+
 ## Convert a static image
 
 From the repository root, this creates a full-screen 144×168 C asset and a PNG preview:
