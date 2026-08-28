@@ -708,4 +708,3 @@ def convert_images(
             )
         )
     return converted
-

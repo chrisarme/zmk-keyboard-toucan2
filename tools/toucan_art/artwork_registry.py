@@ -393,4 +393,3 @@ def sync_artworks(repo_root: Path) -> int:
         raise ValueError(f"installed artwork asset is missing: {missing[0]}")
     _write_artwork_integration(repo_root, manifest)
     return len(manifest["artworks"])
-
