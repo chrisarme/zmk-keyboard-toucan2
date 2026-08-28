@@ -23,7 +23,7 @@ static const struct toucan_artwork artwork_registry[] = {
         .frame_count = &darkSoulsBonfire_frame_count,
         .interval_ms = 125,
         .x = 7,
-        .y = 7,
+        .y = 12,
     },
 };
 

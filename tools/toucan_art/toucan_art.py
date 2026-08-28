@@ -19,6 +19,8 @@ from pathlib import Path
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 STATIC_IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+ARTWORK_AREA_SIZE = 144
+DEFAULT_FOOTER_GAP = 2
 C_KEYWORDS = {
     "auto",
     "break",
@@ -862,9 +864,18 @@ def _write_artwork_integration(repo_root: Path, manifest: dict) -> None:
 def install_artwork(args) -> dict:
     repo_root = args.repo_root.resolve()
     width, height = args.size
-    x = (144 - width) // 2 if args.x is None else args.x
-    y = (144 - height) // 2 if args.y is None else args.y
-    if x < 0 or y < 0 or x + width > 144 or y + height > 144:
+    x = (ARTWORK_AREA_SIZE - width) // 2 if args.x is None else args.x
+    y = (
+        max(0, ARTWORK_AREA_SIZE - height - DEFAULT_FOOTER_GAP)
+        if args.y is None
+        else args.y
+    )
+    if (
+        x < 0
+        or y < 0
+        or x + width > ARTWORK_AREA_SIZE
+        or y + height > ARTWORK_AREA_SIZE
+    ):
         raise ValueError(
             f"{width}x{height} at ({x}, {y}) must fit the 144x144 artwork area"
         )
@@ -1050,7 +1061,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--x", type=int, help="left position; defaults to horizontal safe-area centering"
     )
     install.add_argument(
-        "--y", type=int, help="top position; defaults to vertical safe-area centering"
+        "--y", type=int, help="top position; defaults to two pixels above the footer"
     )
     install.add_argument("--force", action="store_true")
     list_command = subparsers.add_parser("list", help="list installed artwork")

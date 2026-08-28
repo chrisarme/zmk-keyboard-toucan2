@@ -801,7 +801,7 @@ class ConvertCommandTests(unittest.TestCase):
 
 
 class ArtworkManagerTests(unittest.TestCase):
-    def test_install_centers_resized_artwork_in_the_safe_area_by_default(self):
+    def test_install_centers_width_and_leaves_two_pixels_above_footer_by_default(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo = Path(temp_dir)
             source = repo / "centered.png"
@@ -829,7 +829,7 @@ class ArtworkManagerTests(unittest.TestCase):
                 (repo / "config" / "toucan_artworks.json").read_text(encoding="utf-8")
             )
             self.assertEqual(manifest["artworks"][0]["x"], 12)
-            self.assertEqual(manifest["artworks"][0]["y"], 22)
+            self.assertEqual(manifest["artworks"][0]["y"], 42)
 
     def test_install_converts_and_registers_a_static_image(self):
         with tempfile.TemporaryDirectory() as temp_dir:
