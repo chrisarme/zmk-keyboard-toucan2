@@ -40,6 +40,17 @@ static void draw_footer_rect(lv_obj_t *canvas, lv_coord_t x, lv_coord_t y,
   lv_canvas_draw_rect(canvas, x, y, width, height, &descriptor);
 }
 
+static void draw_charging_bolt(lv_obj_t *canvas, lv_coord_t x, lv_coord_t y) {
+  static const uint8_t row_left[] = {4, 3, 2, 1, 0, 3, 2, 2, 1, 0};
+  static const uint8_t row_width[] = {3, 4, 4, 4, 7, 3, 3, 2, 2, 2};
+  lv_draw_rect_dsc_t descriptor;
+  init_rect_dsc(&descriptor, LVGL_FOREGROUND);
+  for (uint8_t row = 0; row < sizeof(row_left); row++) {
+    lv_canvas_draw_rect(canvas, x + row_left[row], y + row, row_width[row], 1,
+                        &descriptor);
+  }
+}
+
 static void draw_footer_battery(lv_obj_t *canvas, lv_coord_t x,
                                 const char *side, uint8_t level) {
   char label[5];
@@ -74,6 +85,12 @@ static void draw_art_footer(lv_obj_t *canvas,
   draw_footer_battery(canvas, 0, "L", state->battery);
   draw_footer_profiles(canvas, state->active_profile_index);
   draw_footer_battery(canvas, 104, "R", state->battery_p);
+  if (state->charging) {
+    draw_charging_bolt(canvas, 38, 149);
+  }
+  if (state->charging_p) {
+    draw_charging_bolt(canvas, 99, 149);
+  }
 }
 
 static void draw_animation_status(lv_obj_t *canvas,
@@ -119,5 +136,33 @@ void draw_toucan_status_layout(lv_obj_t *canvas,
     break;
   default:
     break;
+  }
+
+  if (state->charging) {
+    switch (screen) {
+    case 0:
+    case 1:
+      draw_charging_bolt(canvas, 35, 29);
+      break;
+    case 2:
+      draw_charging_bolt(canvas, 44, 31);
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (state->charging_p) {
+    switch (screen) {
+    case 0:
+    case 1:
+      draw_charging_bolt(canvas, 107, 29);
+      break;
+    case 2:
+      draw_charging_bolt(canvas, 116, 31);
+      break;
+    default:
+      break;
+    }
   }
 }

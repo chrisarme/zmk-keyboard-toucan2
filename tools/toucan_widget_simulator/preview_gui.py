@@ -268,8 +268,8 @@ class PreviewApp:
             controls, text="L CHG", variable=self.left_charging
         ).grid(row=5, column=0, sticky="w", pady=(2, 12))
         ttk.Checkbutton(
-            controls, text="R CHG", variable=self.right_charging
-        ).grid(row=5, column=1, sticky="w", pady=(2, 12))
+            controls, text="R CHG (PREVIEW)", variable=self.right_charging
+        ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(2, 12))
 
         ttk.Label(controls, text="ACTIVITY", style="Muted.TLabel").grid(
             row=6, column=0, columnspan=3, sticky="w", pady=(0, 6)

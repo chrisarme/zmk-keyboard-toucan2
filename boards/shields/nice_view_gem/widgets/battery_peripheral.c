@@ -2,7 +2,6 @@
 #include "battery_peripheral.h"
 #include "../assets/custom_fonts.h"
 
-LV_IMG_DECLARE(bolt);
 LV_IMG_DECLARE(r_battery_100);
 LV_IMG_DECLARE(r_battery_90);
 LV_IMG_DECLARE(r_battery_75);

@@ -49,6 +49,7 @@ New-Item -ItemType Directory -Force tools/toucan_widget_simulator/previews | Out
   --profile 3 `
   --endpoint ble `
   --connected `
+  --left-charging `
   --output tools/toucan_widget_simulator/previews/full-status.bmp
 ```
 
@@ -69,11 +70,22 @@ Build products and generated previews are ignored by Git.
 | `--profile` | 0–4 | 0 | Filled Bluetooth profile square |
 | `--endpoint` | `usb`, `ble`, or `none` | `ble` | Output type |
 | `--connected` | Flag | Off | Shows `BLE` for a BLE endpoint; without it BLE shows `NULL` |
-| `--left-charging` | Flag | Off | Sets the real left charging state |
-| `--right-charging` | Flag | Off | Sets the real right charging state |
+| `--left-charging` | Flag | Off | Simulates USB power on the left half and displays its charging bolt |
+| `--right-charging` | Flag | Off | Preview-only right charging state for checking the layout |
 | `--output` | BMP filename | Required | Output file to create |
 
-The current battery widgets do not draw a charging glyph, so the charging flags do not visibly change the preview yet. The WPM widget appears only on screen 2 and stores history over time; a one-shot invocation therefore shows only its newest sample column. Screen 3 displays the selected animation inside the upper 144×144 artwork area, leaving the lower 24 pixels for live left/right battery percentages and the active Bluetooth profile. `naotogif_8fps` has 14 142×142 frames at `(1, 2)` and `darkSoulsBonfire` has eight 130×130 frames at `(7, 12)`, leaving two pixels above the footer. Their artwork and footer use the same light-background/dark-ink physical convention as the other screens. The art converter preserves that visible source polarity by default.
+The charging bolts appear beside their battery indicators on every screen. On Screen 3 they
+occupy fixed gaps between the battery labels and profiles, so toggling either bolt does not move
+the surrounding content. Left charging represents USB power on the central half, which is the
+charging proxy exposed by ZMK. The right half's USB state is not transmitted over the split;
+the right toggle exists only for visual layout testing and does not imply that firmware can
+detect it. The WPM widget appears only on screen 2 and stores history over time; a one-shot
+invocation therefore shows only its newest sample column. Screen 3 displays the selected
+animation inside the upper 144×144 artwork area, leaving the lower 24 pixels for live left/right
+battery percentages and the active Bluetooth profile. `naotogif_8fps` has 14 142×142 frames at
+`(1, 2)` and `darkSoulsBonfire` has eight 130×130 frames at `(7, 12)`, leaving two pixels above
+the footer. Their artwork and footer use the same light-background/dark-ink physical convention
+as the other screens. The art converter preserves that visible source polarity by default.
 
 ## Test
 
@@ -81,7 +93,9 @@ The current battery widgets do not draw a charging glyph, so the charging flags 
 ctest --test-dir tools/toucan_widget_simulator/build --output-on-failure
 ```
 
-The tests check runtime screen and artwork selection commands, the per-artwork animation rate, output dimensions, battery fill behavior, every supported screen layout and both registered animations, and the GUI-to-renderer state mapping.
+The tests check runtime screen and artwork selection commands, the per-artwork animation rate,
+output dimensions, battery fill and charging behavior, every supported screen layout and both
+registered animations, and the GUI-to-renderer state mapping.
 
 ## How it relates to the firmware
 

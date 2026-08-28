@@ -99,6 +99,44 @@ def main():
         if dark_pixels == 0 or light_pixels == 0:
             raise AssertionError(f"screen 3 footer should visibly render {name}")
 
+    charging_frame = render(
+        executable,
+        output_dir / "screen-3-charging.bmp",
+        3,
+        ["--left-charging"],
+    )
+    if charging_frame[:144] != frames[3][:144]:
+        raise AssertionError("charging should not change screen 3 artwork")
+    for row_before, row_after in zip(frames[3][151:161], charging_frame[151:161]):
+        if row_before[:35] != row_after[:35]:
+            raise AssertionError("left charging should not move the left battery label")
+    for row_before, row_after in zip(frames[3][149:160], charging_frame[149:160]):
+        if row_before[35:38] != row_after[35:38] or row_before[45:48] != row_after[45:48]:
+            raise AssertionError("left charging bolt should keep three-pixel side gaps")
+    if all(
+        row_before[38:45] == row_after[38:45]
+        for row_before, row_after in zip(frames[3][149:160], charging_frame[149:160])
+    ):
+        raise AssertionError("left charging should draw its bolt in the fixed footer gap")
+    for row_before, row_after in zip(frames[3][144:], charging_frame[144:]):
+        if row_before[48:] != row_after[48:]:
+            raise AssertionError("left charging should not change profiles or right battery")
+
+    for screen in range(3):
+        charging_screen = render(
+            executable,
+            output_dir / f"screen-{screen}-charging.bmp",
+            screen,
+            ["--left-charging"],
+        )
+        if charging_screen == frames[screen]:
+            raise AssertionError(f"left charging should be visible on screen {screen}")
+        for row_before, row_after in zip(frames[screen], charging_screen):
+            if row_before[80:] != row_after[80:]:
+                raise AssertionError(
+                    f"left charging should not change the right battery on screen {screen}"
+                )
+
     next_animation_frame = render(
         executable,
         output_dir / "screen-3-frame-1.bmp",
@@ -120,6 +158,44 @@ def main():
         raise AssertionError("artwork selection should change the artwork region")
     if bonfire_frame[144:] != frames[3][144:]:
         raise AssertionError("artwork selection should not change the status footer")
+
+    right_charging_frame = render(
+        executable,
+        output_dir / "screen-3-right-charging.bmp",
+        3,
+        ["--right-charging"],
+    )
+    if right_charging_frame[:144] != frames[3][:144]:
+        raise AssertionError("right charging should not change screen 3 artwork")
+    for row_before, row_after in zip(frames[3][151:161], right_charging_frame[151:161]):
+        if row_before[109:] != row_after[109:]:
+            raise AssertionError("right charging should not move the right battery label")
+    for row_before, row_after in zip(frames[3][149:160], right_charging_frame[149:160]):
+        if row_before[96:99] != row_after[96:99] or row_before[106:109] != row_after[106:109]:
+            raise AssertionError("right charging bolt should keep three-pixel side gaps")
+    if all(
+        row_before[99:106] == row_after[99:106]
+        for row_before, row_after in zip(frames[3][149:160], right_charging_frame[149:160])
+    ):
+        raise AssertionError("right charging should draw its bolt in the fixed footer gap")
+    for row_before, row_after in zip(frames[3][144:], right_charging_frame[144:]):
+        if row_before[:96] != row_after[:96]:
+            raise AssertionError("right charging should not change left battery or profiles")
+
+    for screen in range(3):
+        right_charging_screen = render(
+            executable,
+            output_dir / f"screen-{screen}-right-charging.bmp",
+            screen,
+            ["--right-charging"],
+        )
+        if right_charging_screen == frames[screen]:
+            raise AssertionError(f"right charging should be visible on screen {screen}")
+        for row_before, row_after in zip(frames[screen], right_charging_screen):
+            if row_before[:64] != row_after[:64]:
+                raise AssertionError(
+                    f"right charging should not change the left battery on screen {screen}"
+                )
 
 
 if __name__ == "__main__":
