@@ -91,6 +91,337 @@ def read_indexed_png(path: Path):
 
 
 class ExtractCommandTests(unittest.TestCase):
+    def test_extract_name_selects_one_exact_descriptor(self):
+        source = """
+        const uint8_t first_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+        };
+        const lv_img_dsc_t first = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = first_map,
+        };
+        const uint8_t second_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t second = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = second_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "assets.c"
+            output_dir = temp / "output"
+            source_path.write_text(source, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--name",
+                    "second",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((output_dir / "first.png").exists())
+            self.assertTrue((output_dir / "second.png").is_file())
+
+    def test_extract_name_error_suggests_close_descriptor(self):
+        source = """
+        const uint8_t battery_arc_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t battery_arc = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = battery_arc_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "assets.c"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(temp / "output"),
+                    "--name",
+                    "battery_ar",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("descriptor 'battery_ar' was not found", result.stderr)
+            self.assertIn("Did you mean: battery_arc", result.stderr)
+
+    def test_preview_scale_enlarges_each_pixel_with_nearest_neighbor(self):
+        source = """
+        const uint8_t checker_map[] = {
+            0x00, 0x00, 0x00, 0xff,
+            0xff, 0xff, 0xff, 0xff,
+            0x80,
+            0x40,
+        };
+        const lv_img_dsc_t checker = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 2,
+            .header.h = 2,
+            .data_size = 10,
+            .data = checker_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "assets.c"
+            output_dir = temp / "output"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--preview-scale",
+                    "3",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            width, height, _, _, rows = read_indexed_png(output_dir / "checker.png")
+            self.assertEqual((width, height), (6, 6))
+            self.assertEqual(rows[0][:3], [(255, 255, 255)] * 3)
+            self.assertEqual(rows[0][3:], [(0, 0, 0)] * 3)
+            self.assertEqual(rows[3][:3], [(0, 0, 0)] * 3)
+            self.assertEqual(rows[3][3:], [(255, 255, 255)] * 3)
+
+    def test_contact_sheet_creates_a_labeled_png_for_extracted_assets(self):
+        from PIL import Image
+
+        source = """
+        const uint8_t dark_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+        };
+        const lv_img_dsc_t dark = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = dark_map,
+        };
+        const uint8_t light_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t light = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 9,
+            .data = light_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "assets.c"
+            output_dir = temp / "output"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                    "--preview-scale",
+                    "4",
+                    "--contact-sheet",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            sheet_path = output_dir / "contact-sheet.png"
+            self.assertTrue(sheet_path.is_file())
+            with Image.open(sheet_path) as sheet:
+                self.assertEqual(sheet.format, "PNG")
+                self.assertGreater(sheet.width, 8)
+                self.assertGreater(sheet.height, 4)
+                self.assertEqual(sheet.info["toucan_descriptors"], "dark, light")
+
+    def test_reports_source_descriptor_and_sizes_for_declared_size_mismatch(self):
+        source = """
+        const uint8_t pixel_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t pixel = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 10,
+            .data = pixel_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "bad_asset.c"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(temp / "output"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(str(source_path), result.stderr)
+            self.assertIn("pixel", result.stderr)
+            self.assertIn("declares 10 data bytes", result.stderr)
+            self.assertIn("has 9", result.stderr)
+
+    def test_accepts_legacy_descriptor_size_that_excludes_palette(self):
+        source = """
+        const uint8_t legacy_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t legacy = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .header.h = 1,
+            .data_size = 1,
+            .data = legacy_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "legacy.c"
+            output_dir = temp / "output"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((output_dir / "legacy.png").is_file())
+
+    def test_reports_missing_fields_in_indexed_image_descriptor(self):
+        source = """
+        const uint8_t incomplete_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t incomplete = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 1,
+            .data_size = 9,
+            .data = incomplete_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "incomplete.c"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(temp / "output"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(str(source_path), result.stderr)
+            self.assertIn("incomplete", result.stderr)
+            self.assertIn("missing required field .header.h", result.stderr)
+
+    def test_reports_dimension_and_array_size_mismatch(self):
+        source = """
+        const uint8_t too_short_map[] = {
+            0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
+        };
+        const lv_img_dsc_t too_short = {
+            .header.cf = LV_IMG_CF_INDEXED_1BIT,
+            .header.w = 9,
+            .header.h = 1,
+            .data_size = 9,
+            .data = too_short_map,
+        };
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source_path = temp / "wrong_dimensions.c"
+            source_path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "extract",
+                    str(source_path),
+                    "--output",
+                    str(temp / "output"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(str(source_path), result.stderr)
+            self.assertIn("too_short", result.stderr)
+            self.assertIn("9x1 requires 10 data bytes", result.stderr)
+            self.assertIn("array 'too_short_map' has 9", result.stderr)
+
     def test_extracts_an_indexed_one_bit_lvgl_image_to_png(self):
         source = """
         #include <lvgl.h>

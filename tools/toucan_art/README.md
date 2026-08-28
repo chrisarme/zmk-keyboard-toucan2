@@ -6,15 +6,15 @@ ordinary indexed PNG files. It is located under
 `tools/`, outside the Zephyr module's `boards`, `config`, and `zephyr` source trees, and is
 not included in firmware builds.
 
-Extraction and galleries use only the Python standard library. Image conversion has one
-optional dependency, Pillow:
+Basic extraction and HTML galleries use only the Python standard library. Image conversion
+and PNG contact sheets have one optional dependency, Pillow:
 
 ```powershell
 py -3 -m pip install -r tools/toucan_art/requirements.txt
 ```
 
-Pillow is loaded only by the `convert` command. The existing `extract` command continues to
-work when Pillow is not installed.
+Pillow is loaded only when conversion or `extract --contact-sheet` needs it. Normal extraction
+and `extract --gallery` continue to work when Pillow is not installed.
 
 ## Code layout
 
@@ -273,8 +273,49 @@ py -3 tools/toucan_art/toucan_art.py extract `
     --output tools/toucan_art/previews
 ```
 
+When a C file contains many descriptors, select one by its exact, case-sensitive name:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py extract `
+    boards/shields/nice_view_gem/assets/images.c `
+    --output tools/toucan_art/previews `
+    --name l_battery_100
+```
+
+If the name is not present, the error suggests close descriptor names when possible. To make
+individual source pixels easier to inspect, add an integer nearest-neighbor scale. This changes
+only the generated PNG dimensions; it does not modify the C asset or firmware:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py extract `
+    boards/shields/nice_view_gem/assets/images.c `
+    --output tools/toucan_art/previews `
+    --name l_battery_100 `
+    --preview-scale 8
+```
+
+For a portable overview that does not require a browser, request a labeled PNG contact sheet:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py extract `
+    boards/shields/nice_view_gem/assets/darkSoulsBonfire.c `
+    --output tools/toucan_art/previews `
+    --contact-sheet
+```
+
+This retains every individual PNG and additionally writes `contact-sheet.png`. Each card shows
+the descriptor name, original dimensions, and source filename. `--preview-scale` also enlarges
+the images in the contact sheet. Contact sheets require Pillow; install the requirements shown
+at the beginning of this document if it is unavailable.
+
 The generated PNGs preserve the descriptor dimensions, two-entry palette, row padding,
-and exact one-bit pixel values. They can be opened in a browser or image editor.
+and exact one-bit pixel values unless `--preview-scale` is explicitly requested. They can be
+opened in a browser or image editor.
+
+The parser validates indexed descriptors before writing output. Errors identify the source file
+and descriptor, missing required fields, declared-versus-actual array sizes, or dimensions that
+do not match the packed pixel data. Both LVGL size conventions already present in this project
+are accepted: a descriptor may count the palette or only the pixel payload.
 
 Extracted PNGs preserve the raw LVGL palette exactly. Because the physical display reverses
 logical monochrome polarity, raw extracted images can look opposite to the keyboard. The

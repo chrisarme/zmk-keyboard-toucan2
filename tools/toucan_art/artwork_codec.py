@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import binascii
+import difflib
 import html
 import math
 import re
@@ -123,8 +124,18 @@ def parse_assets(text: str) -> list[ImageAsset]:
         height_match = re.search(r"\.header\.h\s*=\s*(\d+)", body)
         data_match = re.search(r"\.data\s*=\s*([A-Za-z_]\w*)", body)
         size_match = re.search(r"\.data_size\s*=\s*(\d+)", body)
-        if not (width_match and height_match and data_match):
-            continue
+        required_fields = (
+            (".header.w", width_match),
+            (".header.h", height_match),
+            (".data", data_match),
+        )
+        missing_fields = [name for name, value in required_fields if value is None]
+        if missing_fields:
+            noun = "field" if len(missing_fields) == 1 else "fields"
+            raise ValueError(
+                f"{match.group('name')}: missing required {noun} "
+                f"{', '.join(missing_fields)}"
+            )
 
         data_name = data_match.group(1)
         if data_name not in arrays:
@@ -133,6 +144,22 @@ def parse_assets(text: str) -> list[ImageAsset]:
         raw = arrays[data_name]
         if len(raw) < 8:
             raise ValueError(f"{match.group('name')}: image data is shorter than its palette")
+        declared_size = int(size_match.group(1)) if size_match else None
+        valid_declared_sizes = (len(raw), len(raw) - 8)
+        if declared_size is not None and declared_size not in valid_declared_sizes:
+            raise ValueError(
+                f"{match.group('name')}: descriptor declares {declared_size} data bytes, "
+                f"but array {data_name!r} has {len(raw)} including its 8-byte palette "
+                f"({len(raw) - 8} pixel bytes)"
+            )
+        width = int(width_match.group(1))
+        height = int(height_match.group(1))
+        expected_size = 8 + ((width + 7) // 8) * height
+        if len(raw) != expected_size:
+            raise ValueError(
+                f"{match.group('name')}: {width}x{height} requires {expected_size} data bytes "
+                f"including the palette, but array {data_name!r} has {len(raw)}"
+            )
 
         palette = tuple(
             (raw[index + 2], raw[index + 1], raw[index], raw[index + 3])
@@ -141,11 +168,11 @@ def parse_assets(text: str) -> list[ImageAsset]:
         assets.append(
             ImageAsset(
                 name=match.group("name"),
-                width=int(width_match.group(1)),
-                height=int(height_match.group(1)),
+                width=width,
+                height=height,
                 palette=palette,
                 pixels=raw[8:],
-                declared_size=int(size_match.group(1)) if size_match else None,
+                declared_size=declared_size,
             )
         )
 
@@ -204,6 +231,33 @@ def write_physical_preview_png(asset: ImageAsset, output_path: Path) -> None:
     )
 
 
+def scale_asset_nearest(asset: ImageAsset, scale: int) -> ImageAsset:
+    if scale == 1:
+        return asset
+
+    source_stride = (asset.width + 7) // 8
+    scaled_width = asset.width * scale
+    scaled_height = asset.height * scale
+    scaled_stride = (scaled_width + 7) // 8
+    scaled_pixels = bytearray(scaled_stride * scaled_height)
+    for y in range(scaled_height):
+        source_row = asset.pixels[(y // scale) * source_stride :]
+        output_row = y * scaled_stride
+        for x in range(scaled_width):
+            source_bit = (source_row[(x // scale) // 8] >> (7 - ((x // scale) % 8))) & 1
+            if source_bit:
+                scaled_pixels[output_row + x // 8] |= 1 << (7 - (x % 8))
+
+    return ImageAsset(
+        name=asset.name,
+        width=scaled_width,
+        height=scaled_height,
+        palette=asset.palette,
+        pixels=bytes(scaled_pixels),
+        declared_size=8 + len(scaled_pixels),
+    )
+
+
 def write_physical_preview_gif(
     assets: list[ImageAsset], output_path: Path, duration_ms: int
 ) -> None:
@@ -249,19 +303,37 @@ def discover_source_files(inputs: list[Path]) -> list[Path]:
     return source_files
 
 
-def extract_sources(inputs: list[Path], output_dir: Path) -> list[ExtractedAsset]:
+def extract_sources(
+    inputs: list[Path],
+    output_dir: Path,
+    selected_name: str | None = None,
+    preview_scale: int = 1,
+) -> list[ExtractedAsset]:
     extracted = []
     names = set()
+    available_names = []
     for source_path in discover_source_files(inputs):
-        assets = parse_assets(source_path.read_text(encoding="utf-8"))
+        try:
+            assets = parse_assets(source_path.read_text(encoding="utf-8"))
+        except ValueError as error:
+            raise ValueError(f"{source_path}: {error}") from error
         for asset in assets:
+            available_names.append(asset.name)
+            if selected_name is not None and asset.name != selected_name:
+                continue
             if asset.name in names:
                 raise ValueError(f"duplicate image name {asset.name!r}")
             names.add(asset.name)
             output_path = output_dir / f"{asset.name}.png"
-            write_indexed_png(asset, output_path)
+            write_indexed_png(scale_asset_nearest(asset, preview_scale), output_path)
             extracted.append(ExtractedAsset(asset, source_path, output_path))
     if not extracted:
+        if selected_name is not None:
+            suggestions = difflib.get_close_matches(selected_name, available_names, n=3)
+            suggestion_text = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(
+                f"descriptor {selected_name!r} was not found.{suggestion_text}"
+            )
         joined_inputs = ", ".join(str(path) for path in inputs)
         raise ValueError(f"no LV_IMG_CF_INDEXED_1BIT images found in: {joined_inputs}")
     return extracted
@@ -314,6 +386,82 @@ def write_gallery(extracted: list[ExtractedAsset], output_path: Path) -> None:
 """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(document, encoding="utf-8")
+
+
+def write_contact_sheet(
+    extracted: list[ExtractedAsset], output_path: Path, preview_scale: int = 1
+) -> None:
+    try:
+        from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
+    except ImportError as error:
+        raise RuntimeError(
+            "PNG contact sheets require Pillow; install it with "
+            "'py -3 -m pip install -r tools/toucan_art/requirements.txt'"
+        ) from error
+
+    scaled_assets = [scale_asset_nearest(item.asset, preview_scale) for item in extracted]
+    labels = [
+        f"{item.asset.name}\n{item.asset.width}x{item.asset.height} - {item.source_path.name}"
+        for item in extracted
+    ]
+    font = ImageFont.load_default()
+    measurement = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    label_bounds = [measurement.multiline_textbbox((0, 0), label, font=font) for label in labels]
+    label_width = max(bounds[2] - bounds[0] for bounds in label_bounds)
+    label_height = max(bounds[3] - bounds[1] for bounds in label_bounds)
+    image_width = max(asset.width for asset in scaled_assets)
+    image_height = max(asset.height for asset in scaled_assets)
+
+    padding = 12
+    gap = 12
+    margin = 16
+    cell_width = max(image_width, label_width) + 2 * padding
+    cell_height = image_height + label_height + 3 * padding
+    columns = min(4, math.ceil(math.sqrt(len(extracted))))
+    rows = math.ceil(len(extracted) / columns)
+    sheet_width = 2 * margin + columns * cell_width + (columns - 1) * gap
+    sheet_height = 2 * margin + rows * cell_height + (rows - 1) * gap
+    sheet = Image.new("RGBA", (sheet_width, sheet_height), (24, 24, 24, 255))
+    draw = ImageDraw.Draw(sheet)
+
+    for index, (asset, label) in enumerate(zip(scaled_assets, labels)):
+        column = index % columns
+        row = index // columns
+        left = margin + column * (cell_width + gap)
+        top = margin + row * (cell_height + gap)
+        draw.rounded_rectangle(
+            (left, top, left + cell_width - 1, top + cell_height - 1),
+            radius=6,
+            fill=(48, 48, 48, 255),
+            outline=(96, 96, 96, 255),
+        )
+
+        stride = (asset.width + 7) // 8
+        pixels = []
+        for y in range(asset.height):
+            row_data = asset.pixels[y * stride : (y + 1) * stride]
+            pixels.extend(
+                asset.palette[(row_data[x // 8] >> (7 - (x % 8))) & 1]
+                for x in range(asset.width)
+            )
+        preview = Image.new("RGBA", (asset.width, asset.height))
+        preview.putdata(pixels)
+        image_left = left + (cell_width - asset.width) // 2
+        sheet.alpha_composite(preview, (image_left, top + padding))
+        draw.multiline_text(
+            (left + padding, top + 2 * padding + image_height),
+            label,
+            fill=(240, 240, 240, 255),
+            font=font,
+            spacing=2,
+        )
+
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text(
+        "toucan_descriptors", ", ".join(item.asset.name for item in extracted)
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert("RGB").save(output_path, pnginfo=metadata, optimize=True)
 
 
 def _require_pillow():

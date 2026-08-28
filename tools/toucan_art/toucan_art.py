@@ -12,6 +12,7 @@ from artwork_codec import (
     _validate_c_identifier,
     convert_images,
     extract_sources,
+    write_contact_sheet,
     write_gallery,
 )
 from artwork_registry import (
@@ -34,7 +35,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     extract.add_argument("--output", type=Path, required=True, help="output directory")
     extract.add_argument(
+        "--name", help="extract only the descriptor with this exact, case-sensitive name"
+    )
+    extract.add_argument(
+        "--preview-scale",
+        type=int,
+        default=1,
+        metavar="N",
+        help="enlarge extracted PNGs by integer nearest-neighbor scaling (default: 1)",
+    )
+    extract.add_argument(
         "--gallery", action="store_true", help="also create a browser gallery at index.html"
+    )
+    extract.add_argument(
+        "--contact-sheet",
+        action="store_true",
+        help="also create a labeled PNG contact sheet at contact-sheet.png",
     )
     convert = subparsers.add_parser(
         "convert", help="convert ordinary static images to one-bit LVGL v8 C arrays"
@@ -128,9 +144,17 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         if args.command == "extract":
-            extracted = extract_sources(args.source, args.output)
+            if args.preview_scale < 1:
+                raise ValueError("--preview-scale must be at least 1")
+            extracted = extract_sources(
+                args.source, args.output, args.name, args.preview_scale
+            )
             if args.gallery:
                 write_gallery(extracted, args.output / "index.html")
+            if args.contact_sheet:
+                write_contact_sheet(
+                    extracted, args.output / "contact-sheet.png", args.preview_scale
+                )
         elif args.command == "convert":
             if not 0 <= args.threshold <= 255:
                 raise ValueError("--threshold must be between 0 and 255")
@@ -190,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
             print(item.output_path)
         if args.gallery:
             print(args.output / "index.html")
+        if args.contact_sheet:
+            print(args.output / "contact-sheet.png")
     elif args.command == "convert":
         for item in converted:
             details = f"{item.asset.width}x{item.asset.height}, {item.total_data_size} data bytes"
