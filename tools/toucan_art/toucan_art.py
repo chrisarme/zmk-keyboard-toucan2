@@ -720,6 +720,33 @@ def _manifest_path(repo_root: Path) -> Path:
     return repo_root / "config" / "toucan_artworks.json"
 
 
+def _budget_path(repo_root: Path) -> Path:
+    return repo_root / "config" / "toucan_artwork_budget.json"
+
+
+def _load_artwork_budget(repo_root: Path) -> dict | None:
+    path = _budget_path(repo_root)
+    if not path.exists():
+        return None
+    budget = json.loads(path.read_text(encoding="utf-8"))
+    required = {
+        "version",
+        "artwork_data_limit_bytes",
+        "left_flash_estimate_base_bytes",
+        "left_flash_capacity_bytes",
+    }
+    if not isinstance(budget, dict) or not required.issubset(budget):
+        raise ValueError(f"invalid artwork budget: {path}")
+    if budget["version"] != 1:
+        raise ValueError(f"unsupported artwork budget version: {path}")
+    for field in required - {"version"}:
+        if not isinstance(budget[field], int) or budget[field] < 1:
+            raise ValueError(f"{field} must be a positive integer")
+    if budget["left_flash_estimate_base_bytes"] >= budget["left_flash_capacity_bytes"]:
+        raise ValueError("left flash estimate base must be below capacity")
+    return budget
+
+
 def _load_artwork_manifest(repo_root: Path) -> dict:
     path = _manifest_path(repo_root)
     if not path.exists():
@@ -889,22 +916,18 @@ def install_artwork(args) -> dict:
         raise ValueError(f"artwork {args.name!r} is already installed")
 
     generated_dir = repo_root / "tools" / "toucan_art" / "generated"
+    conversion_dir = generated_dir / "dry-run" if args.dry_run else generated_dir
     converted = convert_images(
-        [args.source], generated_dir, args.size, args.fit, args.background,
-        args.threshold, args.dither, args.invert, args.name, True, args.force,
+        [args.source], conversion_dir, args.size, args.fit, args.background,
+        args.threshold, args.dither, args.invert, args.name, True,
+        args.force or args.dry_run,
         args.fps, args.max_frames, 0, None,
     )[0]
-    asset_dir = repo_root / "boards" / "shields" / "nice_view_gem" / "assets"
-    asset_dir.mkdir(parents=True, exist_ok=True)
-    asset_path = asset_dir / converted.c_path.name
-    if asset_path.exists() and not args.force:
-        raise ValueError(f"refusing to overwrite installed asset {asset_path}")
-    shutil.copyfile(converted.c_path, asset_path)
 
     animated = converted.duration_ms is not None
     entry = {
         "name": args.name,
-        "file": asset_path.name,
+        "file": converted.c_path.name,
         "symbol": args.name,
         "animated": animated,
         "frame_count": converted.frame_count,
@@ -914,18 +937,84 @@ def install_artwork(args) -> dict:
         "y": y,
         "data_bytes": converted.total_data_size,
     }
+    current_data_bytes = sum(item["data_bytes"] for item in manifest["artworks"])
+    replaced_data_bytes = (
+        manifest["artworks"][existing_index]["data_bytes"]
+        if existing_index is not None
+        else 0
+    )
+    projected_data_bytes = current_data_bytes - replaced_data_bytes + entry["data_bytes"]
+    budget = _load_artwork_budget(repo_root)
+    estimated_left_flash_bytes = None
+    if budget is not None:
+        estimated_left_flash_bytes = (
+            budget["left_flash_estimate_base_bytes"] + projected_data_bytes
+        )
+        if projected_data_bytes > budget["artwork_data_limit_bytes"]:
+            print(
+                f"warning: projected artwork data {projected_data_bytes} exceeds budget "
+                f"{budget['artwork_data_limit_bytes']}",
+                file=sys.stderr,
+            )
+    installed_index = (
+        len(manifest["artworks"]) if existing_index is None else existing_index
+    )
+    if args.dry_run:
+        firmware_asset = (
+            repo_root
+            / "boards"
+            / "shields"
+            / "nice_view_gem"
+            / "assets"
+            / converted.c_path.name
+        )
+        generated_preview = generated_dir / converted.preview_path.name
+        result = dict(entry)
+        result.update(
+            {
+                "index": installed_index,
+                "dry_run": True,
+                "preview_path": converted.preview_path,
+                "current_data_bytes": current_data_bytes,
+                "projected_data_bytes": projected_data_bytes,
+                "budget": budget,
+                "estimated_left_flash_bytes": estimated_left_flash_bytes,
+                "would_change": [
+                    generated_dir / converted.c_path.name,
+                    generated_preview,
+                    firmware_asset,
+                    _manifest_path(repo_root),
+                    repo_root / "config" / "toucan_artworks.cmake",
+                    repo_root / "include" / "dt-bindings" / "zmk" / "toucan_artwork.h",
+                    repo_root
+                    / "boards"
+                    / "shields"
+                    / "nice_view_gem"
+                    / "widgets"
+                    / "artwork_registry.c",
+                ],
+            }
+        )
+        return result
+
+    asset_dir = repo_root / "boards" / "shields" / "nice_view_gem" / "assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    asset_path = asset_dir / converted.c_path.name
+    if asset_path.exists() and not args.force:
+        raise ValueError(f"refusing to overwrite installed asset {asset_path}")
+    shutil.copyfile(converted.c_path, asset_path)
+
     if existing_index is None:
         manifest["artworks"].append(entry)
-        installed_index = len(manifest["artworks"]) - 1
     else:
         manifest["artworks"][existing_index] = entry
-        installed_index = existing_index
     _write_artwork_integration(repo_root, manifest)
     manifest_path = _manifest_path(repo_root)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     result = dict(entry)
     result["index"] = installed_index
+    result["dry_run"] = False
     return result
 
 
@@ -946,6 +1035,24 @@ def list_artworks(repo_root: Path) -> list[str]:
         total = sum(item["data_bytes"] for item in manifest["artworks"])
         lines.append(f"Total image data: {total:,} bytes")
     return lines
+
+
+def artwork_budget_status(repo_root: Path) -> dict:
+    repo_root = repo_root.resolve()
+    manifest = _load_artwork_manifest(repo_root)
+    budget = _load_artwork_budget(repo_root)
+    if budget is None:
+        raise ValueError(f"artwork budget configuration is missing: {_budget_path(repo_root)}")
+    artwork_data_bytes = sum(item["data_bytes"] for item in manifest["artworks"])
+    return {
+        "artwork_data_bytes": artwork_data_bytes,
+        "artwork_data_limit_bytes": budget["artwork_data_limit_bytes"],
+        "estimated_left_flash_bytes": (
+            budget["left_flash_estimate_base_bytes"] + artwork_data_bytes
+        ),
+        "left_flash_capacity_bytes": budget["left_flash_capacity_bytes"],
+        "exceeded": artwork_data_bytes > budget["artwork_data_limit_bytes"],
+    }
 
 
 def remove_artwork(repo_root: Path, name: str) -> dict:
@@ -1063,10 +1170,24 @@ def _build_parser() -> argparse.ArgumentParser:
     install.add_argument(
         "--y", type=int, help="top position; defaults to two pixels above the footer"
     )
+    install.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="preview and report the installation without changing firmware files",
+    )
     install.add_argument("--force", action="store_true")
     list_command = subparsers.add_parser("list", help="list installed artwork")
     list_command.add_argument(
         "--repo-root", type=Path, default=Path(__file__).resolve().parents[2]
+    )
+    budget_command = subparsers.add_parser(
+        "budget", help="report installed artwork usage and enforce its configured limit"
+    )
+    budget_command.add_argument(
+        "--repo-root", type=Path, default=Path(__file__).resolve().parents[2]
+    )
+    budget_command.add_argument(
+        "--strict", action="store_true", help="exit with an error when the limit is exceeded"
     )
     remove = subparsers.add_parser("remove", help="remove artwork from the registry")
     remove.add_argument("name", type=_validate_c_identifier)
@@ -1125,6 +1246,14 @@ def main(argv: list[str] | None = None) -> int:
             installed = install_artwork(args)
         elif args.command == "list":
             artwork_lines = list_artworks(args.repo_root)
+        elif args.command == "budget":
+            budget_status = artwork_budget_status(args.repo_root)
+            if args.strict and budget_status["exceeded"]:
+                raise ValueError(
+                    "artwork budget exceeded: "
+                    f"{budget_status['artwork_data_bytes']} > "
+                    f"{budget_status['artwork_data_limit_bytes']} bytes"
+                )
         elif args.command == "remove":
             removed = remove_artwork(args.repo_root, args.name)
         else:
@@ -1147,15 +1276,57 @@ def main(argv: list[str] | None = None) -> int:
             if item.preview_path:
                 print(item.preview_path)
     elif args.command == "install":
-        print(
-            f"installed {installed['name']} at index {installed['index']} "
-            f"({installed['frame_count']} frame(s), {installed['data_bytes']} data bytes)"
-        )
+        if installed["dry_run"]:
+            print(f"DRY RUN: would install {installed['name']} at index {installed['index']}")
+            print(f"Placement: ({installed['x']}, {installed['y']})")
+            print(f"Frames: {installed['frame_count']}")
+            if installed["animated"]:
+                cycle_ms = installed["frame_count"] * installed["interval_ms"]
+                print(
+                    f"Playback: {installed['fps']} FPS "
+                    f"({installed['interval_ms']} ms/frame, {cycle_ms} ms cycle)"
+                )
+            else:
+                print("Playback: static")
+            print(f"Image data: {installed['data_bytes']:,} bytes")
+            print(f"Current artwork data: {installed['current_data_bytes']:,} bytes")
+            print(f"Projected artwork data: {installed['projected_data_bytes']:,} bytes")
+            if installed["budget"] is not None:
+                capacity = installed["budget"]["left_flash_capacity_bytes"]
+                percent = installed["estimated_left_flash_bytes"] * 100 / capacity
+                print(
+                    f"Estimated left flash: {installed['estimated_left_flash_bytes']:,} / "
+                    f"{capacity:,} bytes ({percent:.2f}%)"
+                )
+            print(f"Preview: {installed['preview_path']}")
+            print("Files a real install would change:")
+            for path in installed["would_change"]:
+                print(f"  {path.relative_to(args.repo_root.resolve())}")
+        else:
+            print(
+                f"installed {installed['name']} at index {installed['index']} "
+                f"({installed['frame_count']} frame(s), {installed['data_bytes']} data bytes)"
+            )
     elif args.command == "list":
         if artwork_lines:
             print("\n".join(artwork_lines))
         else:
             print("no artwork installed")
+    elif args.command == "budget":
+        flash_percent = (
+            budget_status["estimated_left_flash_bytes"]
+            * 100
+            / budget_status["left_flash_capacity_bytes"]
+        )
+        print(
+            f"Artwork data: {budget_status['artwork_data_bytes']:,} / "
+            f"{budget_status['artwork_data_limit_bytes']:,} bytes"
+        )
+        print(
+            f"Estimated left flash: {budget_status['estimated_left_flash_bytes']:,} / "
+            f"{budget_status['left_flash_capacity_bytes']:,} bytes ({flash_percent:.2f}%)"
+        )
+        print("Budget status: " + ("EXCEEDED" if budget_status["exceeded"] else "within limit"))
     elif args.command == "remove":
         print(f"removed {removed['name']} ({removed['data_bytes']:,} data bytes)")
     else:

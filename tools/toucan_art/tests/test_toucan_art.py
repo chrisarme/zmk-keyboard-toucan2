@@ -801,6 +801,197 @@ class ConvertCommandTests(unittest.TestCase):
 
 
 class ArtworkManagerTests(unittest.TestCase):
+    def test_install_dry_run_reports_projection_without_changing_firmware_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            source = repo / "preview.png"
+            write_rgb_png(source, [[(0, 0, 0)]])
+            manifest_path = repo / "config" / "toucan_artworks.json"
+            manifest_path.parent.mkdir(parents=True)
+            original_manifest = json.dumps(
+                {
+                    "version": 1,
+                    "artworks": [
+                        {
+                            "name": "existing",
+                            "file": "existing.c",
+                            "symbol": "existing",
+                            "animated": False,
+                            "frame_count": 1,
+                            "fps": 0,
+                            "interval_ms": 0,
+                            "x": 1,
+                            "y": 2,
+                            "data_bytes": 100,
+                        }
+                    ],
+                },
+                indent=2,
+            ) + "\n"
+            manifest_path.write_text(original_manifest, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "install",
+                    str(source),
+                    "--name",
+                    "preview",
+                    "--repo-root",
+                    str(repo),
+                    "--size",
+                    "8x8",
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("DRY RUN", result.stdout)
+            self.assertIn("Placement: (68, 134)", result.stdout)
+            self.assertIn("Current artwork data: 100 bytes", result.stdout)
+            self.assertIn("Projected artwork data: 116 bytes", result.stdout)
+            self.assertIn("Playback: static", result.stdout)
+            self.assertIn("Files a real install would change:", result.stdout)
+            self.assertIn("config\\toucan_artworks.json", result.stdout)
+            self.assertIn("assets\\preview.c", result.stdout)
+            self.assertIn("widgets\\artwork_registry.c", result.stdout)
+            self.assertEqual(manifest_path.read_text(encoding="utf-8"), original_manifest)
+            self.assertFalse(
+                (repo / "boards" / "shields" / "nice_view_gem" / "assets").exists()
+            )
+            self.assertFalse((repo / "config" / "toucan_artworks.cmake").exists())
+            self.assertTrue(
+                (
+                    repo
+                    / "tools"
+                    / "toucan_art"
+                    / "generated"
+                    / "dry-run"
+                    / "preview.preview.png"
+                ).is_file()
+            )
+
+    def test_install_dry_run_warns_when_projected_artwork_exceeds_budget(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            source = repo / "preview.png"
+            write_rgb_png(source, [[(0, 0, 0)]])
+            config = repo / "config"
+            config.mkdir(parents=True)
+            (config / "toucan_artworks.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artworks": [
+                            {
+                                "name": "existing",
+                                "file": "existing.c",
+                                "symbol": "existing",
+                                "animated": False,
+                                "frame_count": 1,
+                                "fps": 0,
+                                "interval_ms": 0,
+                                "x": 1,
+                                "y": 2,
+                                "data_bytes": 100,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (config / "toucan_artwork_budget.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artwork_data_limit_bytes": 110,
+                        "left_flash_estimate_base_bytes": 1000,
+                        "left_flash_capacity_bytes": 2000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "install",
+                    str(source),
+                    "--name",
+                    "preview",
+                    "--repo-root",
+                    str(repo),
+                    "--size",
+                    "8x8",
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Estimated left flash: 1,116 / 2,000 bytes (55.80%)", result.stdout)
+            self.assertIn("warning: projected artwork data 116 exceeds budget 110", result.stderr)
+
+    def test_budget_strict_fails_when_installed_artwork_exceeds_limit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            config = repo / "config"
+            config.mkdir(parents=True)
+            (config / "toucan_artworks.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artworks": [
+                            {
+                                "name": "large",
+                                "file": "large.c",
+                                "symbol": "large",
+                                "animated": False,
+                                "frame_count": 1,
+                                "fps": 0,
+                                "interval_ms": 0,
+                                "x": 1,
+                                "y": 2,
+                                "data_bytes": 120,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (config / "toucan_artwork_budget.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "artwork_data_limit_bytes": 110,
+                        "left_flash_estimate_base_bytes": 1000,
+                        "left_flash_capacity_bytes": 2000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "budget",
+                    "--strict",
+                    "--repo-root",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("artwork budget exceeded: 120 > 110 bytes", result.stderr)
+
     def test_install_centers_width_and_leaves_two_pixels_above_footer_by_default(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo = Path(temp_dir)

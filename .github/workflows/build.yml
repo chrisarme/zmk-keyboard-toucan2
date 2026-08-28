@@ -2,5 +2,15 @@ name: Build ZMK firmware
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  artwork-budget:
+    name: Check artwork flash budget
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Enforce artwork data limit
+        run: python3 tools/toucan_art/toucan_art.py budget --strict
+
   build:
+    needs: artwork-budget
     uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3

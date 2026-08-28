@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "artwork_data_limit_bytes": 150000,
+  "left_flash_estimate_base_bytes": 359152,
+  "left_flash_capacity_bytes": 806912
+}

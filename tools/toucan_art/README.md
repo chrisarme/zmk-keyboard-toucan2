@@ -131,6 +131,24 @@ py -3 tools/toucan_art/toucan_art.py install cool-animation.gif `
     --fps 8
 ```
 
+Preview the complete installation first without changing the manifest, shield assets, or
+generated firmware integration:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py install cool-animation.gif `
+    --name cool_animation `
+    --size 120x100 `
+    --fps 8 `
+    --dry-run
+```
+
+The dry run performs the real conversion and validation. It reports placement, frame count,
+playback timing, new image bytes, current and projected artwork bytes, estimated total left
+flash, and every path a real installation would change. Its C output and round-tripped visual
+preview are retained under `generated/dry-run`, which is ignored by Git. No compiled shield
+asset, manifest, binding constant, registry, or build file is changed. Use `--force` when dry
+running a replacement for an existing registry name, just as for a real replacement.
+
 `install` uses the Screen 3 defaults—142×142, contain fit, white/light background, position
 horizontally centered and two pixels above the footer, and at most 16 frames. It creates a
 round-tripped preview under `generated`, copies the compiled C asset into the shield, appends
@@ -159,6 +177,25 @@ List installed artwork and its exact image-data cost:
 ```powershell
 py -3 tools/toucan_art/toucan_art.py list
 ```
+
+Check the configured artwork budget:
+
+```powershell
+py -3 tools/toucan_art/toucan_art.py budget
+py -3 tools/toucan_art/toucan_art.py budget --strict
+```
+
+Budget settings live in `config/toucan_artwork_budget.json`. The initial 150,000-byte ceiling
+applies to exact packed artwork data; the current 53,640-byte library is comfortably below it.
+Strict mode returns an error above the ceiling and runs as a prerequisite to the GitHub
+firmware build. Interactive installation and dry runs warn instead, allowing experimentation
+and preview generation without bypassing CI.
+
+The total-left-flash figure is an estimate, calculated as the configured non-art firmware
+baseline plus exact projected artwork bytes. Recalibrate
+`left_flash_estimate_base_bytes = linked left flash - current artwork data` after a firmware
+change materially affects non-art code. The strict ceiling remains reliable when that estimate
+drifts because it is enforced against artwork bytes, not the estimate.
 
 Remove an entry and its compiled firmware asset:
 
