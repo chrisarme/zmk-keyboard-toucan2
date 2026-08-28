@@ -11,7 +11,7 @@
 
 # Development tools
 
-- [Display asset previewer](tools/toucan_art/README.md) converts embedded one-bit LVGL image assets into ordinary PNG files and an HTML gallery.
+- [Display artwork manager](tools/toucan_art/README.md) extracts existing one-bit LVGL assets, converts and previews new images or GIFs, and installs selectable artwork into the firmware registry.
 - [Widget simulator](tools/toucan_widget_simulator/README.md) renders real Toucan LVGL widgets locally without flashing the keyboard.
 
 # License
