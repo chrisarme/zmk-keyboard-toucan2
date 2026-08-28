@@ -28,6 +28,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "battery.h"
 #include "battery_peripheral.h"
+#include "artwork_registry.h"
 #include "chart.h"
 #include "layer.h"
 #include "output.h"
@@ -38,9 +39,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <toucan/screen.h>
 #include <toucan/animation.h>
+#include <toucan/artwork.h>
+#include <toucan/artwork_selection.h>
 #include <toucan/screen_selection.h>
-
-extern const uint8_t naotogif_frame_count;
 
 struct connection_status_state {
     bool connected;
@@ -48,8 +49,10 @@ struct connection_status_state {
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static atomic_t requested_screen = ATOMIC_INIT(CONFIG_TOUCAN_STATUS_SCREEN);
+static atomic_t requested_artwork = ATOMIC_INIT(0);
 static atomic_t animation_activity_active = ATOMIC_INIT(1);
 static uint8_t active_screen = CONFIG_TOUCAN_STATUS_SCREEN;
+static uint8_t active_artwork;
 static uint8_t animation_frame;
 
 static void force_redraw_all_widgets(void);
@@ -58,13 +61,15 @@ static void update_animation_schedule(void);
 static void animation_work_cb(struct k_work *work) {
     ARG_UNUSED(work);
 
-    if (!atomic_get(&animation_activity_active) ||
-        toucan_animation_fps(active_screen) == 0) {
+    const struct toucan_artwork *artwork = toucan_artwork_get(active_artwork);
+    uint8_t frame_count = artwork == NULL ? 0 : *artwork->frame_count;
+    if (!atomic_get(&animation_activity_active) || artwork == NULL ||
+        toucan_animation_interval_ms(active_screen, artwork->interval_ms) == 0 ||
+        frame_count < 2) {
         return;
     }
 
-    animation_frame =
-        toucan_animation_next_frame(animation_frame, naotogif_frame_count);
+    animation_frame = toucan_animation_next_frame(animation_frame, frame_count);
     force_redraw_all_widgets();
     update_animation_schedule();
 }
@@ -72,8 +77,14 @@ static void animation_work_cb(struct k_work *work) {
 K_WORK_DELAYABLE_DEFINE(animation_work, animation_work_cb);
 
 static void update_animation_schedule(void) {
-    uint32_t interval_ms = toucan_animation_interval_ms(active_screen);
-    if (!atomic_get(&animation_activity_active) || interval_ms == 0) {
+    const struct toucan_artwork *artwork = toucan_artwork_get(active_artwork);
+    uint8_t frame_count = artwork == NULL ? 0 : *artwork->frame_count;
+    uint32_t interval_ms = artwork == NULL
+                               ? 0
+                               : toucan_animation_interval_ms(
+                                     active_screen, artwork->interval_ms);
+    if (!atomic_get(&animation_activity_active) || interval_ms == 0 ||
+        frame_count < 2) {
         /* A queued callback may still run, but it rechecks both conditions above. */
         (void)k_work_cancel_delayable(&animation_work);
         return;
@@ -87,13 +98,48 @@ static void update_animation_schedule(void) {
 }
 
 #if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+#define SETTINGS_DIRTY_SCREEN BIT(0)
+#define SETTINGS_DIRTY_ARTWORK BIT(1)
+
+static atomic_t settings_dirty;
+
+static void mark_settings_dirty(atomic_val_t mask) {
+    atomic_val_t current;
+
+    do {
+        current = atomic_get(&settings_dirty);
+    } while (!atomic_cas(&settings_dirty, current, current | mask));
+}
+
+static atomic_val_t take_settings_dirty(void) {
+    atomic_val_t current;
+
+    do {
+        current = atomic_get(&settings_dirty);
+    } while (!atomic_cas(&settings_dirty, current, 0));
+
+    return current;
+}
+
 static void screen_save_work_cb(struct k_work *work) {
     ARG_UNUSED(work);
 
-    uint8_t screen = (uint8_t)atomic_get(&requested_screen);
-    int err = settings_save_one("toucan/screen", &screen, sizeof(screen));
-    if (err < 0) {
-        LOG_WRN("Failed to persist status screen: %d", err);
+    atomic_val_t dirty = take_settings_dirty();
+
+    if (dirty & SETTINGS_DIRTY_SCREEN) {
+        uint8_t screen = (uint8_t)atomic_get(&requested_screen);
+        int err = settings_save_one("toucan/screen", &screen, sizeof(screen));
+        if (err < 0) {
+            LOG_WRN("Failed to persist status screen: %d", err);
+        }
+    }
+
+    if (dirty & SETTINGS_DIRTY_ARTWORK) {
+        uint8_t artwork = (uint8_t)atomic_get(&requested_artwork);
+        int err = settings_save_one("toucan/artwork", &artwork, sizeof(artwork));
+        if (err < 0) {
+            LOG_WRN("Failed to persist artwork: %d", err);
+        }
     }
 }
 
@@ -102,31 +148,37 @@ K_WORK_DELAYABLE_DEFINE(screen_save_work, screen_save_work_cb);
 static int screen_settings_load_cb(const char *name, size_t len,
                                    settings_read_cb read_cb, void *cb_arg) {
     const char *next;
-    uint8_t persisted_screen;
-    uint8_t selected_screen;
+    uint8_t persisted;
+    uint8_t selected;
+    bool is_screen = settings_name_steq(name, "screen", &next) && next == NULL;
+    bool is_artwork = settings_name_steq(name, "artwork", &next) && next == NULL;
 
-    if (!settings_name_steq(name, "screen", &next) || next != NULL) {
+    if (!is_screen && !is_artwork) {
         return -ENOENT;
     }
 
-    if (len != sizeof(persisted_screen)) {
-        LOG_WRN("Ignoring invalid persisted status screen length: %u", (unsigned int)len);
+    if (len != sizeof(persisted)) {
+        LOG_WRN("Ignoring invalid persisted Toucan setting length: %u",
+                (unsigned int)len);
         return 0;
     }
 
-    int err = read_cb(cb_arg, &persisted_screen, sizeof(persisted_screen));
-    if (err != sizeof(persisted_screen)) {
-        LOG_WRN("Ignoring unreadable persisted status screen: %d", err);
+    int err = read_cb(cb_arg, &persisted, sizeof(persisted));
+    if (err != sizeof(persisted)) {
+        LOG_WRN("Ignoring unreadable persisted Toucan setting: %d", err);
         return 0;
     }
 
-    err = toucan_screen_restore(persisted_screen, &selected_screen);
+    err = is_screen
+              ? toucan_screen_restore(persisted, &selected)
+              : toucan_artwork_restore(persisted, toucan_artwork_count(), &selected);
     if (err < 0) {
-        LOG_WRN("Ignoring invalid persisted status screen: %u", persisted_screen);
+        LOG_WRN("Ignoring invalid persisted %s: %u",
+                is_screen ? "status screen" : "artwork", persisted);
         return 0;
     }
 
-    atomic_set(&requested_screen, selected_screen);
+    atomic_set(is_screen ? &requested_screen : &requested_artwork, selected);
     return 0;
 }
 
@@ -137,6 +189,7 @@ SETTINGS_STATIC_HANDLER_DEFINE(toucan_screen, "toucan", NULL, screen_settings_lo
 static void screen_change_work_cb(struct k_work *work) {
     ARG_UNUSED(work);
     active_screen = (uint8_t)atomic_get(&requested_screen);
+    active_artwork = (uint8_t)atomic_get(&requested_artwork);
     animation_frame = 0;
     force_redraw_all_widgets();
     update_animation_schedule();
@@ -161,6 +214,36 @@ int toucan_screen_request(uint32_t command) {
     } while (!atomic_cas(&requested_screen, current, selected));
 
 #if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+    mark_settings_dirty(SETTINGS_DIRTY_SCREEN);
+    k_work_reschedule(&screen_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
+#endif
+
+    if (zmk_display_is_initialized()) {
+        k_work_submit_to_queue(zmk_display_work_q(), &screen_change_work);
+    }
+
+    return 0;
+}
+
+int toucan_artwork_request(uint32_t command) {
+    atomic_val_t current;
+    uint8_t selected;
+    int err;
+
+    do {
+        current = atomic_get(&requested_artwork);
+        err = toucan_artwork_resolve((uint8_t)current, command,
+                                     toucan_artwork_count(), &selected);
+        if (err < 0) {
+            return err;
+        }
+        if (current == selected) {
+            return 0;
+        }
+    } while (!atomic_cas(&requested_artwork, current, selected));
+
+#if IS_ENABLED(CONFIG_TOUCAN_STATUS_SCREEN_PERSIST)
+    mark_settings_dirty(SETTINGS_DIRTY_ARTWORK);
     k_work_reschedule(&screen_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
 #endif
 
@@ -184,7 +267,8 @@ static void draw_top(lv_obj_t *widget, const struct status_state *state) {
         return;
     }
 
-    draw_toucan_status_layout(canvas, state, active_screen, animation_frame);
+    draw_toucan_status_layout(canvas, state, active_screen, active_artwork,
+                              animation_frame);
 }
 
 /**
@@ -411,6 +495,7 @@ ZMK_SUBSCRIPTION(widget_chart_status, zmk_wpm_state_changed);
 
 int zmk_widget_screen_init(struct zmk_widget_screen *widget, lv_obj_t *parent) {
     active_screen = (uint8_t)atomic_get(&requested_screen);
+    active_artwork = (uint8_t)atomic_get(&requested_artwork);
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, SCREEN_WIDTH, SCREEN_HEIGHT);
 

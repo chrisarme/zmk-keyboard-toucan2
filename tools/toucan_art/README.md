@@ -133,6 +133,27 @@ LV_IMG_DECLARE(artwork);
 Keeping integration manual prevents an exploratory conversion from silently increasing the
 controller firmware.
 
+### Add artwork to the Screen 3 registry
+
+Screen 3 can cycle among assets compiled into a small flash-resident registry. To add one:
+
+1. Copy the reviewed generated C file to `boards/shields/nice_view_gem/assets`.
+2. Add that file to `boards/shields/nice_view_gem/CMakeLists.txt`.
+3. Declare its generated `*_frames` and `*_frame_count` symbols in
+   `widgets/artwork_registry.c`, then add one registry entry with its frame interval and
+   draw coordinates.
+4. Increment `TOUCAN_ARTWORK_COUNT` in
+   `include/dt-bindings/zmk/toucan_artwork.h` and add a direct-selection constant if one is
+   useful.
+5. Rebuild the simulator and firmware. In the simulator, use `--screen 3 --artwork INDEX`
+   or select the index in the GUI.
+
+The registry stores pointers and small metadata only; each selected asset draws into the
+existing shared canvas. Image frames are the meaningful flash cost. Static images can use
+the same format with a one-element frame table and a zero-millisecond interval. On the
+keyboard, SET+P selects the previous entry and SET+G selects the next entry. The selected
+index is persisted with the same debounced settings mechanism as the selected screen.
+
 ## Extract the current artwork
 
 From the repository root, run:

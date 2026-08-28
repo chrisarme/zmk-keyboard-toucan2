@@ -23,6 +23,7 @@ add_executable(
   src/main.c
   src/zmk_shims.c
   ${TOUCAN_WIDGET_DIR}/battery.c
+  ${TOUCAN_WIDGET_DIR}/artwork_registry.c
   ${TOUCAN_WIDGET_DIR}/battery_arc.c
   ${TOUCAN_WIDGET_DIR}/battery_peripheral.c
   ${TOUCAN_WIDGET_DIR}/battery_arc_peripheral.c
@@ -38,6 +39,7 @@ add_executable(
   ${TOUCAN_WIDGET_DIR}/util.c
   ${TOUCAN_ASSET_DIR}/images.c
   ${TOUCAN_ASSET_DIR}/naotogif.c
+  ${TOUCAN_ASSET_DIR}/darkSoulsBonfire.c
   ${TOUCAN_ASSET_DIR}/quinquefive_8.c
   ${TOUCAN_ASSET_DIR}/quinquefive_12.c
   ${TOUCAN_ASSET_DIR}/quinquefive_18.c
@@ -48,6 +50,7 @@ target_include_directories(
   toucan_widget_simulator
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/shims
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     ${TOUCAN_WIDGET_DIR}
     ${TOUCAN_ASSET_DIR}
 )
@@ -76,6 +79,7 @@ if(BUILD_TESTING)
     screen_selection_test
     tests/test_screen_selection.c
     ../../src/animation.c
+    ../../src/artwork_selection.c
     ../../src/screen_selection.c
   )
   target_include_directories(

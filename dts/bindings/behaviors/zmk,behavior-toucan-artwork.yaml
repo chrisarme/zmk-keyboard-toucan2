@@ -1,0 +1,5 @@
+description: Select or cycle the Toucan fullscreen artwork
+
+compatible: "zmk,behavior-toucan-artwork"
+
+include: one_param.yaml

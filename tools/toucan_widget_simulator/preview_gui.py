@@ -12,6 +12,7 @@ from tkinter import ttk
 @dataclass(frozen=True)
 class PreviewState:
     screen: int = 2
+    artwork: int = 0
     animation_frame: int = 0
     left_battery: int = 75
     right_battery: int = 50
@@ -32,6 +33,8 @@ def build_renderer_command(
         str(renderer),
         "--screen",
         str(state.screen),
+        "--artwork",
+        str(state.artwork),
         "--animation-frame",
         str(state.animation_frame),
         "--left-battery",
@@ -109,6 +112,7 @@ class PreviewApp:
         self.animation_frame = 0
 
         self.screen = tk.IntVar(value=2)
+        self.artwork = tk.IntVar(value=0)
         self.left_battery = tk.IntVar(value=75)
         self.right_battery = tk.IntVar(value=50)
         self.wpm = tk.IntVar(value=0)
@@ -128,8 +132,8 @@ class PreviewApp:
 
     def _configure_window(self) -> None:
         self.root.title("TOUCAN // DISPLAY LAB")
-        self.root.geometry("880x700")
-        self.root.minsize(820, 680)
+        self.root.geometry("880x730")
+        self.root.minsize(820, 710)
         self.root.configure(bg=self.BACKGROUND)
 
         style = ttk.Style(self.root)
@@ -225,33 +229,44 @@ class PreviewApp:
             textvariable=self.screen,
         ).grid(row=0, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(0, 10))
 
-        ttk.Label(controls, text="POWER", style="Muted.TLabel").grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(0, 6)
+        ttk.Label(controls, text="ARTWORK", style="Muted.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(0, 10)
         )
-        self._add_scale(controls, 2, "LEFT", self.left_battery, 100)
-        self._add_scale(controls, 3, "RIGHT", self.right_battery, 100)
+        ttk.Combobox(
+            controls,
+            values=(0, 1),
+            state="readonly",
+            width=5,
+            textvariable=self.artwork,
+        ).grid(row=1, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(0, 10))
+
+        ttk.Label(controls, text="POWER", style="Muted.TLabel").grid(
+            row=2, column=0, columnspan=3, sticky="w", pady=(0, 6)
+        )
+        self._add_scale(controls, 3, "LEFT", self.left_battery, 100)
+        self._add_scale(controls, 4, "RIGHT", self.right_battery, 100)
         ttk.Checkbutton(
             controls, text="L CHG", variable=self.left_charging
-        ).grid(row=4, column=0, sticky="w", pady=(2, 12))
+        ).grid(row=5, column=0, sticky="w", pady=(2, 12))
         ttk.Checkbutton(
             controls, text="R CHG", variable=self.right_charging
-        ).grid(row=4, column=1, sticky="w", pady=(2, 12))
+        ).grid(row=5, column=1, sticky="w", pady=(2, 12))
 
         ttk.Label(controls, text="ACTIVITY", style="Muted.TLabel").grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(0, 6)
+            row=6, column=0, columnspan=3, sticky="w", pady=(0, 6)
         )
-        self._add_scale(controls, 6, "WPM", self.wpm, 255)
+        self._add_scale(controls, 7, "WPM", self.wpm, 255)
 
         ttk.Label(controls, text="LAYER", style="Muted.TLabel").grid(
-            row=7, column=0, columnspan=3, sticky="w", pady=(10, 6)
+            row=8, column=0, columnspan=3, sticky="w", pady=(10, 6)
         )
-        ttk.Label(controls, text="LAYER #").grid(row=8, column=0, sticky="w")
+        ttk.Label(controls, text="LAYER #").grid(row=9, column=0, sticky="w")
         ttk.Spinbox(
             controls, from_=0, to=255, width=5, textvariable=self.layer
-        ).grid(row=8, column=1, sticky="ew", padx=(8, 0))
-        ttk.Label(controls, text="NAME").grid(row=9, column=0, sticky="w", pady=(5, 0))
+        ).grid(row=9, column=1, sticky="ew", padx=(8, 0))
+        ttk.Label(controls, text="NAME").grid(row=10, column=0, sticky="w", pady=(5, 0))
         ttk.Entry(controls, width=12, textvariable=self.layer_name).grid(
-            row=9, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(5, 0)
+            row=10, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(5, 0)
         )
         ttk.Label(
             controls,
@@ -259,30 +274,30 @@ class PreviewApp:
             style="Muted.TLabel",
             wraplength=245,
             justify="left",
-        ).grid(row=10, column=0, columnspan=3, sticky="w", pady=(5, 12))
+        ).grid(row=11, column=0, columnspan=3, sticky="w", pady=(5, 12))
 
         ttk.Label(controls, text="WIRELESS", style="Muted.TLabel").grid(
-            row=11, column=0, columnspan=3, sticky="w", pady=(0, 6)
+            row=12, column=0, columnspan=3, sticky="w", pady=(0, 6)
         )
-        ttk.Label(controls, text="PROFILE").grid(row=12, column=0, sticky="w")
+        ttk.Label(controls, text="PROFILE").grid(row=13, column=0, sticky="w")
         ttk.Spinbox(
             controls, from_=0, to=4, width=5, textvariable=self.profile
-        ).grid(row=12, column=1, sticky="ew", padx=(8, 0))
+        ).grid(row=13, column=1, sticky="ew", padx=(8, 0))
         ttk.Combobox(
             controls,
             values=("ble", "usb", "none"),
             state="readonly",
             width=9,
             textvariable=self.endpoint,
-        ).grid(row=13, column=0, columnspan=2, sticky="ew", pady=(5, 3))
+        ).grid(row=14, column=0, columnspan=2, sticky="ew", pady=(5, 3))
         ttk.Checkbutton(
             controls, text="CONNECTED", variable=self.connected
-        ).grid(row=14, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ).grid(row=15, column=0, columnspan=2, sticky="w", pady=(0, 8))
         ttk.Label(
             controls,
             text="PREVIEW UPDATES AUTOMATICALLY",
             style="Muted.TLabel",
-        ).grid(row=15, column=0, columnspan=3, sticky="w")
+        ).grid(row=16, column=0, columnspan=3, sticky="w")
         controls.columnconfigure(1, weight=1)
 
         ttk.Label(display_panel, text="SHARP MEMORY LCD // 144 × 168", style="Muted.TLabel").pack(
@@ -337,6 +352,7 @@ class PreviewApp:
     def _watch_controls(self) -> None:
         for variable in (
             self.screen,
+            self.artwork,
             self.layer,
             self.layer_name,
             self.profile,
@@ -350,6 +366,7 @@ class PreviewApp:
     def current_state(self) -> PreviewState:
         return PreviewState(
             screen=self.screen.get(),
+            artwork=self.artwork.get(),
             animation_frame=self.animation_frame,
             left_battery=self.left_battery.get(),
             right_battery=self.right_battery.get(),
@@ -405,7 +422,8 @@ class PreviewApp:
             animation_fps = 5 if self.screen.get() == 3 else None
             if animation_fps:
                 self.status.set(f"ANIMATION // {animation_fps} FPS")
-                self.animation_frame = (self.animation_frame + 1) % 9
+                frame_count = 9 if self.artwork.get() == 0 else 5
+                self.animation_frame = (self.animation_frame + 1) % frame_count
                 self.pending_render = self.root.after(
                     round(1000 / animation_fps), self.render_preview
                 )

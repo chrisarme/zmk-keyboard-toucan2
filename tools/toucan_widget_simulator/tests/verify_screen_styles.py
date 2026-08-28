@@ -110,6 +110,17 @@ def main():
     if next_animation_frame[144:] != frames[3][144:]:
         raise AssertionError("animation frame selection should not change the status footer")
 
+    bonfire_frame = render(
+        executable,
+        output_dir / "screen-3-bonfire.bmp",
+        3,
+        ["--artwork", "1"],
+    )
+    if bonfire_frame[:144] == frames[3][:144]:
+        raise AssertionError("artwork selection should change the artwork region")
+    if bonfire_frame[144:] != frames[3][144:]:
+        raise AssertionError("artwork selection should not change the status footer")
+
 
 if __name__ == "__main__":
     main()

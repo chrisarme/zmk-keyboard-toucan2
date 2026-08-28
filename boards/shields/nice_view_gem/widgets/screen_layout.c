@@ -1,4 +1,5 @@
 #include "screen_layout.h"
+#include "artwork_registry.h"
 
 #include <stdio.h>
 
@@ -15,9 +16,6 @@
 #include "output_arc.h"
 #include "profile.h"
 #include "profile_arc.h"
-
-extern const lv_img_dsc_t *const naotogif_frames[];
-extern const uint8_t naotogif_frame_count;
 
 #define IMAGE_FOOTER_Y 144
 #define IMAGE_PROFILE_X 48
@@ -80,18 +78,24 @@ static void draw_art_footer(lv_obj_t *canvas,
 
 static void draw_animation_status(lv_obj_t *canvas,
                                   const struct status_state *state,
+                                  uint8_t artwork_index,
                                   uint8_t animation_frame) {
   lv_draw_img_dsc_t image_descriptor;
   lv_draw_img_dsc_init(&image_descriptor);
-  const lv_img_dsc_t *frame =
-      naotogif_frames[animation_frame % naotogif_frame_count];
-  lv_canvas_draw_img(canvas, 1, 2, frame, &image_descriptor);
+  const struct toucan_artwork *artwork = toucan_artwork_get(artwork_index);
+  uint8_t frame_count = artwork == NULL ? 0 : *artwork->frame_count;
+  if (frame_count > 0) {
+    const lv_img_dsc_t *frame = artwork->frames[animation_frame % frame_count];
+    lv_canvas_draw_img(canvas, artwork->x, artwork->y, frame,
+                       &image_descriptor);
+  }
   draw_art_footer(canvas, state);
 }
 
 void draw_toucan_status_layout(lv_obj_t *canvas,
                                const struct status_state *state,
                                uint8_t screen,
+                               uint8_t artwork,
                                uint8_t animation_frame) {
   switch (screen) {
   case 0:
@@ -111,7 +115,7 @@ void draw_toucan_status_layout(lv_obj_t *canvas,
     draw_battery_peripheral_arc_status(canvas, state);
     break;
   case 3:
-    draw_animation_status(canvas, state, animation_frame);
+    draw_animation_status(canvas, state, artwork, animation_frame);
     break;
   default:
     break;

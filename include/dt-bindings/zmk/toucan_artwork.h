@@ -1,0 +1,7 @@
+#pragma once
+
+#define TOUCAN_ARTWORK_0 0
+#define TOUCAN_ARTWORK_1 1
+#define TOUCAN_ARTWORK_COUNT 2
+#define TOUCAN_ARTWORK_NEXT 2
+#define TOUCAN_ARTWORK_PREV 3
