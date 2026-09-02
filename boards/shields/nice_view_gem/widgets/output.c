@@ -28,7 +28,11 @@ void draw_output_standard_status(lv_obj_t *canvas, const struct status_state *st
             draw_usb_connected(canvas);
             break;
         case ZMK_TRANSPORT_BLE:
-            draw_ble_connected(canvas);
+            if (state->active_profile_connected) {
+                draw_ble_connected(canvas);
+            } else {
+                draw_ble_disconnected(canvas);
+            }
             break;
         default:
             draw_ble_disconnected(canvas);

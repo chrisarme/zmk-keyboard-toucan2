@@ -69,7 +69,7 @@ Build products and generated previews are ignored by Git.
 | `--layer-name` | Text | None | Named layer label, such as `NAV` |
 | `--profile` | 0–4 | 0 | Filled Bluetooth profile square |
 | `--endpoint` | `usb`, `ble`, or `none` | `ble` | Output type |
-| `--connected` | Flag | Off | Shows `BLE` for a BLE endpoint; without it BLE shows `NULL` |
+| `--connected` | Flag | Off | Shows `BLE` and a filled active-profile square; without it BLE shows `NULL` and the selected profile has a center dot |
 | `--left-charging` | Flag | Off | Simulates USB power on the left half and displays its charging bolt |
 | `--output` | BMP filename | Required | Output file to create |
 
@@ -84,6 +84,11 @@ for live left/right battery percentages and the active Bluetooth profile. `naoto
 `(1, 2)` and `darkSoulsBonfire` has eight 130×130 frames at `(7, 12)`, leaving two pixels above
 the footer. Their artwork and footer use the same light-background/dark-ink physical convention
 as the other screens. The art converter preserves that visible source polarity by default.
+
+Bluetooth connection state is independent from profile selection. A filled active-profile square
+means the selected profile is connected. An outlined active-profile square with a two-pixel center
+dot means it is selected but disconnected. On Screens 0–2, the output label also changes from
+`BLE` to `NULL` when the selected Bluetooth profile disconnects.
 
 ## Test
 

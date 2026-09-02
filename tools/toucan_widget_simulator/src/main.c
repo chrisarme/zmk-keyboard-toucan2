@@ -235,9 +235,7 @@ int main(int argc, char **argv) {
         .charging = options.left_charging,
         .wpm = (uint8_t)options.wpm,
         .selected_endpoint = {
-            .transport = options.endpoint == ZMK_TRANSPORT_BLE && !options.connected
-                             ? TOUCAN_SIMULATOR_TRANSPORT_NONE
-                             : options.endpoint,
+            .transport = options.endpoint,
         },
         .active_profile_index = options.profile,
         .active_profile_connected = options.connected,

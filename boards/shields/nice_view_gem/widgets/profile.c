@@ -16,7 +16,11 @@ static void draw_active_profile(lv_obj_t *canvas, const struct status_state *sta
 
     int offset = state->active_profile_index * 10;
 
-    lv_canvas_draw_rect(canvas, 85 + offset, 143, 8, 8, &rect_white_dsc);
+    if (state->active_profile_connected) {
+        lv_canvas_draw_rect(canvas, 85 + offset, 143, 8, 8, &rect_white_dsc);
+    } else {
+        lv_canvas_draw_rect(canvas, 88 + offset, 146, 2, 2, &rect_white_dsc);
+    }
 }
 
 void draw_profile_standard_status(lv_obj_t *canvas, const struct status_state *state) {

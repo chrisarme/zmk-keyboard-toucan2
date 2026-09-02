@@ -35,7 +35,13 @@ void draw_profile_arc_status(lv_obj_t *canvas, const struct status_state *state)
         int dy = BT_DOT_START_Y + i * BT_DOT_SPACING;
 
         if (i == state->active_profile_index) {
-            draw_filled_rect(canvas, BT_DOT_X, dy, BT_DOT_SIZE, BT_DOT_SIZE, fg);
+            if (state->active_profile_connected) {
+                draw_filled_rect(canvas, BT_DOT_X, dy, BT_DOT_SIZE, BT_DOT_SIZE, fg);
+            } else {
+                draw_outlined_rect(canvas, BT_DOT_X, dy, BT_DOT_SIZE, BT_DOT_SIZE,
+                                   bg, fg, 1);
+                draw_filled_rect(canvas, BT_DOT_X + 3, dy + 3, 2, 2, fg);
+            }
         } else {
             draw_outlined_rect(canvas, BT_DOT_X, dy, BT_DOT_SIZE, BT_DOT_SIZE,
                                bg, fg, 1);

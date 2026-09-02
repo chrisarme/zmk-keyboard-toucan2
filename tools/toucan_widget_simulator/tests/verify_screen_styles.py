@@ -5,7 +5,7 @@ from pathlib import Path
 from verify_battery_preview import read_bmp
 
 
-def render(executable: Path, output: Path, screen: int, overrides=None):
+def render(executable: Path, output: Path, screen: int, overrides=None, connected=True):
     overrides = overrides or []
     result = subprocess.run(
         [
@@ -22,7 +22,7 @@ def render(executable: Path, output: Path, screen: int, overrides=None):
             "3",
             "--endpoint",
             "ble",
-            "--connected",
+            *(["--connected"] if connected else []),
             *overrides,
             "--output",
             str(output),
@@ -98,6 +98,41 @@ def main():
         )
         if dark_pixels == 0 or light_pixels == 0:
             raise AssertionError(f"screen 3 footer should visibly render {name}")
+
+    disconnected_art = render(
+        executable,
+        output_dir / "screen-3-disconnected.bmp",
+        3,
+        connected=False,
+    )
+    if disconnected_art[:144] != frames[3][:144]:
+        raise AssertionError("connection state should not change screen 3 artwork")
+    if disconnected_art[144:] == frames[3][144:]:
+        raise AssertionError("screen 3 should distinguish a disconnected active profile")
+
+    status_regions = {
+        0: {"output": (12, 75, 140, 157), "profiles": (85, 134, 143, 151)},
+        1: {"output": (12, 75, 140, 157), "profiles": (85, 134, 143, 151)},
+        2: {"output": (70, 122, 140, 158), "profiles": (124, 136, 103, 158)},
+    }
+    for screen, regions in status_regions.items():
+        disconnected = render(
+            executable,
+            output_dir / f"screen-{screen}-disconnected.bmp",
+            screen,
+            connected=False,
+        )
+        for name, (x_start, x_end, y_start, y_end) in regions.items():
+            connected_pixels = [
+                row[x_start:x_end] for row in frames[screen][y_start:y_end]
+            ]
+            disconnected_pixels = [
+                row[x_start:x_end] for row in disconnected[y_start:y_end]
+            ]
+            if connected_pixels == disconnected_pixels:
+                raise AssertionError(
+                    f"screen {screen} should show {name} connection state"
+                )
 
     charging_frame = render(
         executable,

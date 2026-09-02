@@ -63,16 +63,21 @@ static void draw_footer_battery(lv_obj_t *canvas, lv_coord_t x,
 }
 
 static void draw_footer_profiles(lv_obj_t *canvas,
-                                 int active_profile_index) {
+                                 int active_profile_index,
+                                 bool active_profile_connected) {
   for (int profile = 0; profile < IMAGE_PROFILE_COUNT; profile++) {
     lv_coord_t x = IMAGE_PROFILE_X + (profile * IMAGE_PROFILE_SPACING);
     draw_footer_rect(canvas, x, IMAGE_PROFILE_Y, IMAGE_PROFILE_SIZE,
                      IMAGE_PROFILE_SIZE, LVGL_FOREGROUND);
 
-    if (profile != active_profile_index) {
+    if (profile != active_profile_index || !active_profile_connected) {
       draw_footer_rect(canvas, x + 1, IMAGE_PROFILE_Y + 1,
                        IMAGE_PROFILE_SIZE - 2, IMAGE_PROFILE_SIZE - 2,
                        LVGL_BACKGROUND);
+    }
+    if (profile == active_profile_index && !active_profile_connected) {
+      draw_footer_rect(canvas, x + 3, IMAGE_PROFILE_Y + 3, 2, 2,
+                       LVGL_FOREGROUND);
     }
   }
 }
@@ -83,7 +88,8 @@ static void draw_art_footer(lv_obj_t *canvas,
   draw_footer_rect(canvas, 0, IMAGE_FOOTER_Y, SCREEN_WIDTH,
                    SCREEN_HEIGHT - IMAGE_FOOTER_Y, LVGL_BACKGROUND);
   draw_footer_battery(canvas, 0, "L", state->battery);
-  draw_footer_profiles(canvas, state->active_profile_index);
+  draw_footer_profiles(canvas, state->active_profile_index,
+                       state->active_profile_connected);
   draw_footer_battery(canvas, 104, "R", state->battery_p);
   if (state->charging) {
     draw_charging_bolt(canvas, 38, 149);
